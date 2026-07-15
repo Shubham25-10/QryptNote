@@ -1,0 +1,32 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /messages/{messageId} {
+      allow read: if true;
+      allow create: if request.resource.data.keys().hasAll(['encryptedMessage', 'viewCount', 'id']) && 
+                      request.resource.data.get('encryptedMessage', '').size() <= 10000 &&
+                      (
+                        (
+                          request.resource.data.get('viewLimit', 1) == -1 ||
+                          request.resource.data.get('passwordHash', null) != null ||
+                          (request.resource.data.get('expiryTimestamp', 0) != null && request.resource.data.get('expiryTimestamp', 0) > (request.time.toMillis() + (25 * 60 * 60 * 1000)))
+                        ) ? (
+                          request.resource.data.get('paidFeatureUnlock', false) == true &&
+                          request.resource.data.get('razorpayPaymentId', '') != '' &&
+                          request.resource.data.get('razorpayPaymentId', '').size() > 0
+                        ) : true
+                      );
+      allow update: if request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewCount']);
+      allow delete: if (resource.data.expiryTimestamp != null && request.time.toMillis() > resource.data.expiryTimestamp)
+                    || (resource.data.viewLimit != -1 && resource.data.viewCount >= resource.data.viewLimit);
+    }
+    match /bug_reports/{reportId} {
+      allow create: if true;
+      allow read, update, delete: if false;
+    }
+    match /error_logs/{logId} {
+      allow create: if true;
+      allow read, update, delete: if false;
+    }
+  }
+}

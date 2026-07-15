@@ -1,0 +1,24 @@
+{
+  "entities": {
+    "Message": {
+      "title": "Message",
+      "description": "A secure message",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "encryptedMessage": { "type": "object" },
+        "expiryTimestamp": { "type": "number" },
+        "viewLimit": { "type": "number" },
+        "viewCount": { "type": "number" },
+        "passwordHash": { "type": "string" },
+        "createdAt": { "type": "number" }
+      }
+    }
+  },
+  "firestore": {
+    "/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/Message" },
+      "description": "Messages"
+    }
+  }
+}

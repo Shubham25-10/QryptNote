@@ -1,0 +1,193 @@
+@import url('https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700&f[]=cabinet-grotesk@700,800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-display: "Cabinet Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Satoshi", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+  --color-ink: #0A0B0F;
+  --color-panel: #14161C;
+  --color-hairline: #262A35;
+  --color-violet: #7C5CFF;
+  --color-teal: #5EEAD4;
+  --color-amber: #FFB84D;
+  --color-text-primary: #F2F1F7;
+  --color-text-muted: #8A8D9B;
+}
+
+body {
+  background-color: var(--color-ink);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+}
+
+@keyframes shard-pulse {
+  0%, 100% { transform: scale(1); filter: brightness(1); }
+  50% { transform: scale(1.05); filter: brightness(1.2); }
+}
+
+/* Faux 3D Typography */
+.text-3d-layered {
+  text-shadow: 
+    calc(var(--tilt-x, 0) * 1px) calc(var(--tilt-y, 0) * 1px) 0px rgba(124, 92, 255, 0.4),
+    calc(var(--tilt-x, 0) * 2px) calc(var(--tilt-y, 0) * 2px) 0px rgba(124, 92, 255, 0.2),
+    calc(var(--tilt-x, 0) * 3px) calc(var(--tilt-y, 0) * 3px) 0px rgba(124, 92, 255, 0.1),
+    calc(var(--tilt-x, 0) * 4px) calc(var(--tilt-y, 0) * 4px) 10px rgba(124, 92, 255, 0.2);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .text-3d-layered {
+    text-shadow: 2px 2px 0px rgba(124, 92, 255, 0.2);
+  }
+}
+
+/* Spotlight */
+.spotlight-wrapper {
+  position: relative;
+  overflow: hidden;
+}
+.spotlight-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    600px circle at var(--mouse-x, 50%) var(--mouse-y, 50%),
+    rgba(124, 92, 255, 0.08),
+    transparent 40%
+  );
+  z-index: 10;
+  mix-blend-mode: screen;
+}
+
+@media (max-width: 768px) {
+  .spotlight-overlay {
+    animation: ambient-pulse 8s infinite alternate;
+    background: radial-gradient(
+      80vw circle at 50% 50%,
+      rgba(124, 92, 255, 0.06),
+      transparent 50%
+    );
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .spotlight-overlay {
+    animation: none;
+    background: none;
+  }
+}
+@keyframes ambient-pulse {
+  0% { opacity: 0.5; }
+  100% { opacity: 1; }
+}
+
+/* Depth-layered Iconography */
+.icon-depth-container {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.icon-depth-base {
+  position: relative;
+  z-index: 2;
+  filter: drop-shadow(0 4px 6px rgba(0,0,0,0.5));
+}
+.icon-depth-shadow {
+  position: absolute;
+  z-index: 1;
+  transform: scale(1.4) translateY(4px);
+  filter: blur(8px);
+  opacity: 0.4;
+  color: var(--color-violet);
+}
+
+/* Morphing Blob Backgrounds */
+.blob-container {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+.morphing-blob {
+  position: absolute;
+  width: 60vw;
+  height: 60vw;
+  max-width: 800px;
+  max-height: 800px;
+  background: linear-gradient(135deg, rgba(124, 92, 255, 0.05) 0%, rgba(94, 234, 212, 0.05) 100%);
+  filter: blur(80px);
+  border-radius: 40% 60% 70% 30% / 40% 50% 60% 50%;
+  animation: morph 15s ease-in-out infinite alternate;
+}
+.morphing-blob-2 {
+  right: -10%;
+  bottom: -20%;
+  background: linear-gradient(135deg, rgba(94, 234, 212, 0.05) 0%, rgba(124, 92, 255, 0.03) 100%);
+  animation-delay: -5s;
+  animation-duration: 20s;
+}
+
+@keyframes morph {
+  0% { border-radius: 40% 60% 70% 30% / 40% 50% 60% 50%; transform: rotate(0deg) scale(1); }
+  100% { border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%; transform: rotate(10deg) scale(1.1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .morphing-blob { animation: none; border-radius: 50%; }
+}
+
+/* Hologram QR Scan Effect */
+.hologram-qr {
+  position: relative;
+  overflow: hidden;
+}
+.hologram-qr::after {
+  content: '';
+  position: absolute;
+  top: -100%;
+  left: 0;
+  right: 0;
+  height: 20px;
+  background: linear-gradient(to bottom, transparent, rgba(94, 234, 212, 0.8), transparent);
+  animation: scan-line 2s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+}
+.hologram-qr-image {
+  animation: chromatic-aberration 2s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+}
+
+@keyframes scan-line {
+  0% { top: -100%; opacity: 0; }
+  10% { opacity: 1; }
+  90% { top: 100%; opacity: 1; }
+  100% { top: 100%; opacity: 0; }
+}
+@keyframes chromatic-aberration {
+  0% { filter: drop-shadow(2px 0 0 rgba(255,0,0,0.5)) drop-shadow(-2px 0 0 rgba(0,255,255,0.5)) blur(2px); opacity: 0.5; }
+  80% { filter: drop-shadow(1px 0 0 rgba(255,0,0,0.2)) drop-shadow(-1px 0 0 rgba(0,255,255,0.2)) blur(1px); opacity: 0.8; }
+  100% { filter: none; opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hologram-qr::after { animation: none; display: none; }
+  .hologram-qr-image { animation: none; opacity: 1; }
+}
+
+/* Depth Hierarchy Shadows */
+.shadow-depth-1 {
+  box-shadow: 0 4px 12px -2px rgba(0,0,0,0.3), 0 0 0 1px var(--color-hairline);
+  transform: translateY(0);
+}
+.shadow-depth-2 {
+  box-shadow: 0 12px 24px -4px rgba(0,0,0,0.4), 0 0 0 1px var(--color-hairline);
+  transform: translateY(-2px);
+}
+.shadow-depth-3 {
+  box-shadow: 0 20px 40px -8px rgba(0,0,0,0.5), 0 0 30px rgba(124,92,255,0.15), 0 0 0 1px var(--color-violet);
+  transform: translateY(-4px);
+}
+
+/* Perspective Scroll Container */
+.perspective-container {
+  perspective: 1200px;
+}
