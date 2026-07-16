@@ -1,5 +1,11 @@
 import { createApp } from '../server';
 
+export const config = {
+  api: {
+    bodyParser: false,
+  },
+};
+
 let cachedApp: any = null;
 
 export default async function handler(req: any, res: any) {

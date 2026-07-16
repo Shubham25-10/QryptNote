@@ -647,8 +647,9 @@ export async function createApp() {
     }
   });
   // Vite middleware for development
-  if (process.env.NODE_ENV !== "production" && process.env.NODE_ENV !== "test") {
-    const { createServer: createViteServer } = await import('vite');
+  if (process.env.NODE_ENV !== "production" && process.env.NODE_ENV !== "test" && !process.env.VERCEL && !process.env.VERCEL_ENV) {
+    const viteModule = 'vite';
+    const { createServer: createViteServer } = await import(viteModule);
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
@@ -667,7 +668,7 @@ export async function createApp() {
         next(e);
       }
     });
-  } else if (process.env.NODE_ENV === "production") {
+  } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
     app.get('*', async (req, res, next) => {
@@ -686,10 +687,17 @@ export async function createApp() {
     });
   }
 
+  app.use((err: any, req: any, res: any, next: any) => {
+    console.error("Global Express Error:", err);
+    if (!res.headersSent) {
+      res.status(500).json({ error: "Internal Server Error", details: err.message });
+    }
+  });
+
   return app;
 }
 
-if (process.env.NODE_ENV !== 'test') {
+if (process.env.NODE_ENV !== 'test' && !process.env.VERCEL && !process.env.VERCEL_ENV) {
   createApp().then(app => {
     const PORT = 3000;
     app.listen(PORT, "0.0.0.0", () => {
