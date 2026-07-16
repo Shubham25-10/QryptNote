@@ -3,7 +3,7 @@ import path from 'path';
 import rateLimit from 'express-rate-limit';
 import crypto from 'crypto';
 import { initializeApp } from 'firebase/app';
-import { initializeFirestore, collection, doc, setDoc, getDoc, deleteDoc, updateDoc } from 'firebase/firestore';
+import { initializeFirestore, collection, doc, setDoc, getDoc, deleteDoc, updateDoc } from 'firebase/firestore/lite';
 import fs from 'fs';
 import cors from 'cors';
 
@@ -113,7 +113,8 @@ function getAdminApp() {
       console.log("Service account project_id from env:", serviceAccount.project_id);
       adminCred = cert(serviceAccount);
     } else {
-      adminCred = applicationDefault();
+      console.log("No FIREBASE_SERVICE_ACCOUNT_JSON found, skipping admin initialization");
+      return null;
     }
     adminApp = initAdminApp({
       credential: adminCred,
@@ -172,7 +173,7 @@ export async function createApp() {
   setInterval(async () => {
     try {
       if (!firestore) return;
-      const { collection, query, where, getDocs, writeBatch } = await import('firebase/firestore');
+      const { collection, query, where, getDocs, writeBatch } = await import('firebase/firestore/lite');
       
       const messagesRef = collection(firestore, 'messages');
       const now = Date.now();
