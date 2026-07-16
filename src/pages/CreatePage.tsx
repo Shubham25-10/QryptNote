@@ -131,7 +131,13 @@ export default function CreatePage() {
         })
       });
       if (!res.ok) {
-        const errorData = await res.json();
+        const text = await res.text();
+        let errorData;
+        try {
+          errorData = JSON.parse(text);
+        } catch (e) {
+          errorData = { error: text || res.statusText };
+        }
         throw new Error(errorData.error || t('errors.network_timeout'));
       }
 

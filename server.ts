@@ -1,11 +1,9 @@
 import express from 'express';
 import path from 'path';
-import { createServer as createViteServer } from 'vite';
 import rateLimit from 'express-rate-limit';
 import crypto from 'crypto';
 import { initializeApp } from 'firebase/app';
 import { initializeFirestore, collection, doc, setDoc, getDoc, deleteDoc, updateDoc } from 'firebase/firestore';
-import { nanoid } from 'nanoid';
 import fs from 'fs';
 import cors from 'cors';
 
@@ -105,8 +103,12 @@ function getAdminApp() {
       try {
         serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
       } catch (err) {
-        // Handle case where newlines are escaped
-        serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON.replace(/\\n/g, '\n'));
+        try {
+          serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON.replace(/\\n/g, '\n'));
+        } catch (innerErr) {
+          console.error("FIREBASE_SERVICE_ACCOUNT_JSON is not a valid JSON string.");
+          return null;
+        }
       }
       console.log("Service account project_id from env:", serviceAccount.project_id);
       adminCred = cert(serviceAccount);
@@ -120,12 +122,13 @@ function getAdminApp() {
     return adminApp;
   } catch (error: any) {
     console.error("Firebase Admin initialization failed:", error.message);
-    throw new Error(`Admin init failed: ${error.message}`);
+    return null;
   }
 }
 
 function getAdminFirestoreInstance() {
   const app = getAdminApp();
+  if (!app) return null;
   return getAdminFirestore(app, "ai-studio-a9ba2121-a2c8-437a-9558-29699c445cf9");
 }
 
@@ -198,7 +201,7 @@ export async function createApp() {
         return res.status(400).json({ error: "Invalid message length" });
       }
 
-      const id = nanoid(8);
+      const id = crypto.randomBytes(4).toString('hex');
       const encryptedData = encrypt(message);
 
       let passwordHash = null;
@@ -596,8 +599,10 @@ export async function createApp() {
 
       if (adminFirestore) {
         await adminFirestore.collection('messages').doc(id).set(messageDoc);
+      } else if (firestore) {
+        await setDoc(doc(firestore, 'messages', id), messageDoc);
       } else {
-        throw new Error("Admin Firestore not initialized. Check FIREBASE_SERVICE_ACCOUNT_JSON.");
+        throw new Error("No Firestore instance available. Check FIREBASE_SERVICE_ACCOUNT_JSON or VITE_FIREBASE_API_KEY.");
       }
       res.json({ success: true, messageDoc });
     } catch (error: any) {
@@ -643,6 +648,7 @@ export async function createApp() {
   });
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production" && process.env.NODE_ENV !== "test") {
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
