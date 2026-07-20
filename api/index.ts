@@ -1,11 +1,11 @@
-import { createApp } from '../server';
+import serverModule from '../dist/server.cjs';
 
 let cachedApp: any = null;
 
 export default async function handler(req: any, res: any) {
   try {
     if (!cachedApp) {
-      cachedApp = await createApp();
+      cachedApp = await serverModule.createApp();
     }
     return cachedApp(req, res);
   } catch (error: any) {
