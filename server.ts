@@ -19,7 +19,7 @@ import { getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
 
 
 // Initialize Firebase
-const firebaseConfigPath = path.join(process.cwd(), 'firebase-applet-config.json');
+import defaultFirebaseConfig from './firebase-applet-config.json';
 let firestore: any;
 
 try {
@@ -35,12 +35,11 @@ try {
       appId: process.env.VITE_FIREBASE_APP_ID,
       firestoreDatabaseId: process.env.VITE_FIREBASE_DATABASE_ID
     };
-    if (!config.firestoreDatabaseId && fs.existsSync(firebaseConfigPath)) {
-      const fileConfig = JSON.parse(fs.readFileSync(firebaseConfigPath, 'utf8'));
-      config.firestoreDatabaseId = fileConfig.firestoreDatabaseId;
+    if (!config.firestoreDatabaseId) {
+      config.firestoreDatabaseId = defaultFirebaseConfig.firestoreDatabaseId;
     }
-  } else if (fs.existsSync(firebaseConfigPath)) {
-    config = JSON.parse(fs.readFileSync(firebaseConfigPath, 'utf8'));
+  } else {
+    config = defaultFirebaseConfig;
   }
 
   if (config) {
@@ -148,7 +147,15 @@ export async function createApp() {
   const app = express();
   app.set('trust proxy', 1);
 
-  app.use(express.json({ limit: '10mb' }));
+
+  app.use((req, res, next) => {
+    if (req.body && typeof req.body === 'object' && Object.keys(req.body).length > 0) {
+      next();
+    } else {
+      express.json({ limit: '10mb' })(req, res, next);
+    }
+  });
+
 
   app.use(cors({
     origin: [

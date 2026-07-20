@@ -3,8 +3,8 @@ service cloud.firestore {
   match /databases/{database}/documents {
     match /messages/{messageId} {
       allow read: if true;
-      allow create: if request.resource.data.keys().hasAll(['encryptedMessage', 'viewCount', 'id']) && 
-                      request.resource.data.get('encryptedMessage', '').size() <= 10000 &&
+      allow create: if request.resource.data.keys().hasAll(['encryptedMessage', 'viewCount', 'id']) &&
+                       request.resource.data.get('encryptedMessage', '').size() <= 10000 &&
                       (
                         (
                           request.resource.data.get('viewLimit', 1) == -1 ||
