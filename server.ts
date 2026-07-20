@@ -676,7 +676,7 @@ export async function createApp() {
         next(e);
       }
     });
-  } else {
+  } else if (!process.env.VERCEL && !process.env.VERCEL_ENV) {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
     app.get('*', async (req, res, next) => {
