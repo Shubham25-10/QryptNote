@@ -1,8 +1,9 @@
 import { PageTransition } from "../components/PageTransition";
 import { TiltCard } from '../components/TiltCard';
 import { MagneticElement } from '../components/MagneticElement';
-import React, { Suspense } from 'react';
+import React, { Suspense, useRef } from 'react';
 import { WebGLBoundary } from '../components/WebGLBoundary';
+import { ScrollJourneyLine } from '../components/ScrollJourneyLine';
 
 import { Link } from "react-router";
 import { Shield, Lock, Send, ScanLine } from "lucide-react";
@@ -14,6 +15,7 @@ const CipherCanvas = React.lazy(() => import("../components/CipherCanvas"));
 
 export default function LandingPage() {
   const { t } = useTranslation();
+  const howItWorksRef = useRef<HTMLElement>(null);
 
   return (
     <PageTransition className="flex flex-col items-center">
@@ -43,17 +45,22 @@ export default function LandingPage() {
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-violet/10 text-violet text-sm font-sans font-medium mb-8 border border-violet/20"
+              className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/5 border border-white/10 backdrop-blur-md mb-8"
             >
-              <Lock className="w-4 h-4" />
-              {t("landing.badge")}
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-violet"></span>
+              </span>
+              <span className="text-xs font-semibold text-red-100/95 tracking-wide font-display">
+                {t("landing.badge")}
+              </span>
             </motion.div>
 
             <motion.h1
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.1 }}
-              className="text-[36px] sm:text-[48px] md:text-[64px] leading-tight font-display font-bold tracking-tight mb-6 px-2 text-text-primary text-3d-layered"
+              className="text-[36px] sm:text-[48px] md:text-[64px] leading-tight font-display font-bold tracking-tight mb-6 px-2 text-transparent bg-clip-text bg-gradient-to-b from-white via-white to-white/50 text-3d-layered"
               dangerouslySetInnerHTML={{ __html: t("landing.headline") }}
             />
 
@@ -72,26 +79,31 @@ export default function LandingPage() {
               transition={{ delay: 0.3 }}
               className="w-full px-4 sm:px-0 sm:w-auto"
             >
-              <MagneticElement strength={25}><Link
-                to="/create"
-                className="w-full sm:w-auto bg-amber text-ink px-8 py-4 rounded-xl font-sans font-medium text-lg transition-all flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(124,92,255,0.4)] hover:shadow-[0_0_30px_rgba(124,92,255,0.6)] hover:bg-amber/90"
-              >
-                {t("landing.create_button")}
-                <Send className="w-5 h-5" />
-              </Link></MagneticElement>
+              <MagneticElement strength={25}>
+                <Link
+                  to="/create"
+                  className="w-full sm:w-auto shiny-cta group inline-flex items-center justify-center text-white px-8 py-4 text-lg font-sans font-medium shadow-[0_0_25px_rgba(239,35,60,0.25)] hover:shadow-[0_0_35px_rgba(239,35,60,0.45)]"
+                >
+                  <span className="relative z-10 flex items-center gap-2 text-white font-medium">
+                    {t("landing.create_button")}
+                    <Send className="w-5 h-5 transition-transform group-hover:translate-x-1" />
+                  </span>
+                </Link>
+              </MagneticElement>
             </motion.div>
           </div>
         </div>
       </section>
 
       {/* How it works */}
-      <section className="w-full border-t border-hairline bg-panel/30 py-32 relative z-10">
+      <section ref={howItWorksRef} className="w-full border-t border-hairline bg-panel/30 py-32 relative z-10">
+        <ScrollJourneyLine containerRef={howItWorksRef} />
         <motion.div 
           initial={{ opacity: 0, scale: 0.95, y: 30 }}
           whileInView={{ opacity: 1, scale: 1, y: 0 }}
           viewport={{ once: true, margin: "-100px" }}
           transition={{ duration: 0.6, ease: "easeOut" }}
-          className="max-w-7xl mx-auto px-6"
+          className="max-w-7xl mx-auto px-6 relative z-10"
         >
           <div className="text-center mb-20">
             <h2 className="text-[32px] md:text-[40px] font-display font-bold mb-4 text-text-primary">

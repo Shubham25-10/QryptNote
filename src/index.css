@@ -7,14 +7,67 @@
   --font-sans: "Satoshi", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 
-  --color-ink: #0A0B0F;
-  --color-panel: #14161C;
-  --color-hairline: #262A35;
-  --color-violet: #7C5CFF;
-  --color-teal: #5EEAD4;
-  --color-amber: #FFB84D;
-  --color-text-primary: #F2F1F7;
-  --color-text-muted: #8A8D9B;
+  --color-ink: #050000;
+  --color-panel: #0E0202;
+  --color-hairline: #220505;
+  --color-violet: #ef233c;
+  --color-teal: #f43f5e;
+  --color-amber: #ef233c;
+  --color-text-primary: #FFFFFF;
+  --color-text-muted: #A3A3A3;
+}
+
+@property --gradient-angle { 
+  syntax: "<angle>"; 
+  initial-value: 0deg; 
+  inherits: false; 
+}
+
+@keyframes border-spin {
+  from { --gradient-angle: 0deg; }
+  to { --gradient-angle: 360deg; }
+}
+
+@keyframes animStar {
+  from { transform: translateY(0px); }
+  to { transform: translateY(-2000px); }
+}
+
+/* Shiny CTA Button style */
+.shiny-cta {
+  --gradient-angle: 0deg;
+  position: relative;
+  overflow: hidden;
+  border-radius: 12px;
+  background: linear-gradient(#0E0202, #0E0202) padding-box,
+              conic-gradient(from var(--gradient-angle), transparent 0%, #ef233c 15%, #ef233c 35%, transparent 50%, transparent 100%) border-box;
+  border: 2px solid transparent;
+  isolation: isolate;
+  animation: border-spin 3s linear infinite;
+}
+
+.shiny-cta::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.15) 0.5px, transparent 0);
+  background-size: 6px 6px;
+  opacity: 0.15;
+  z-index: 0;
+}
+
+/* Parallax Star Backgrounds */
+.stars-1 {
+  box-shadow: 234px 124px #fff, 654px 345px #fff, 876px 12px #fff, 1200px 800px #fff, 400px 1500px #fff, 1800px 200px #fff, 100px 1000px #fff, 900px 1900px #fff, 500px 600px #fff, 1400px 100px #fff, 300px 400px #fff, 1600px 1200px #fff;
+}
+.stars-2 {
+  box-shadow: 123px 456px #fff, 789px 234px #fff, 456px 890px #fff, 1100px 300px #fff, 200px 1200px #fff, 1500px 500px #fff, 600px 1700px #fff, 1300px 900px #fff;
+}
+
+/* Global Selection Styles */
+::selection {
+  background-color: #ef233c !important;
+  color: #ffffff !important;
 }
 
 body {

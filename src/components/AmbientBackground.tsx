@@ -76,8 +76,8 @@ export const AmbientBackground = () => {
   return (
     <div className="fixed inset-0 z-[-1] pointer-events-none bg-ink">
       <Canvas camera={{ position: [0, 0, 5], fov: 60 }} dpr={[1, 1.5]}>
-        <ParticleField count={300} color="#7C5CFF" size={0.04} speed={0.8} />
-        <ParticleField count={150} color="#5EEAD4" size={0.06} speed={1.2} />
+        <ParticleField count={300} color="#ef233c" size={0.04} speed={0.8} />
+        <ParticleField count={150} color="#f43f5e" size={0.06} speed={1.2} />
       </Canvas>
     </div>
   );

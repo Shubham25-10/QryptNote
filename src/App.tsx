@@ -35,12 +35,12 @@ export default function App() {
     // Dynamic ambient color shift tied to time of day
     if (hour >= 20 || hour < 6) {
       // Night: cooler/deeper
-      root.style.setProperty('--color-ink', '#05050A');
-      root.style.setProperty('--color-panel', '#0A0A14');
+      root.style.setProperty('--color-ink', '#050000');
+      root.style.setProperty('--color-panel', '#0E0202');
     } else {
       // Day: warmer undertone
-      root.style.setProperty('--color-ink', '#0A0B0F');
-      root.style.setProperty('--color-panel', '#14161C');
+      root.style.setProperty('--color-ink', '#080101');
+      root.style.setProperty('--color-panel', '#120303');
     }
 
     const handleMouseMove = (e: MouseEvent) => {
@@ -126,6 +126,14 @@ export default function App() {
       </Helmet>
       
       <AmbientBackground />
+      {/* Global Starry Background */}
+      <div className="fixed inset-0 z-0 pointer-events-none">
+        <div className="absolute inset-0 bg-gradient-to-b from-[#1c0202] via-ink to-ink" />
+        <div className="absolute top-0 left-0 w-[1px] h-[1px] bg-transparent stars-1 animate-[animStar_50s_linear_infinite]" />
+        <div className="absolute top-0 left-0 w-[2px] h-[2px] bg-transparent stars-2 animate-[animStar_80s_linear_infinite]" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-violet/5 rounded-full blur-[120px]" />
+        <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.015)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.015)_1px,transparent_1px)] bg-[size:40px_40px] [mask-image:radial-gradient(circle_at_center,black_40%,transparent_80%)]" />
+      </div>
       {/* Morphing Blobs */}
       {location.pathname !== '/msg/:id' && !location.pathname.startsWith('/msg/') && (
         <div className="blob-container">

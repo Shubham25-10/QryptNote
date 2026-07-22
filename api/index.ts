@@ -1,3 +1,4 @@
+// @ts-ignore
 import serverModule from '../dist/server.cjs';
 
 let cachedApp: any = null;
