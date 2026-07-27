@@ -31,9 +31,9 @@ export function ScrollJourneyLine({ containerRef }: ScrollJourneyLineProps) {
       <svg className="hidden">
         <defs>
           <linearGradient id="journey-grad" x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" stopColor="#7C5CFF" /> {/* Violet */}
-            <stop offset="50%" stopColor="#8B5CF6" />
-            <stop offset="100%" stopColor="#5EEAD4" /> {/* Teal */}
+            <stop offset="0%" stopColor="#ef233c" /> {/* Red */}
+            <stop offset="50%" stopColor="#dc2626" />
+            <stop offset="100%" stopColor="#f43f5e" /> {/* Rose Red */}
           </linearGradient>
           <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
             <feGaussianBlur stdDeviation="6" result="blur" />

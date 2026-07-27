@@ -12,7 +12,7 @@
     "helmet_title": "QryptNote | Send Secrets, Not Screenshots",
     "helmet_desc": "Turn any private message into a self-destructing QR code.",
     "badge": "End-to-End Encrypted Storage",
-    "headline": "Send Secrets,<br />Not Screenshots.",
+    "headline": "Send Secrets,<br /><span class=\"text-[#ef233c] inline-block relative\">Not Screenshots.</span>",
     "subheadline": "Turn any private message into a self-destructing QR code. Scan to read, then it vanishes forever. Secure, fast, and simple.",
     "create_button": "Create Private Message",
     "how_it_works": "How It Works",

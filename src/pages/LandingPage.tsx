@@ -49,7 +49,7 @@ export default function LandingPage() {
             >
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-violet"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-[#ef233c]"></span>
               </span>
               <span className="text-xs font-semibold text-red-100/95 tracking-wide font-display">
                 {t("landing.badge")}
@@ -60,7 +60,7 @@ export default function LandingPage() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.1 }}
-              className="text-[36px] sm:text-[48px] md:text-[64px] leading-tight font-display font-bold tracking-tight mb-6 px-2 text-transparent bg-clip-text bg-gradient-to-b from-white via-white to-white/50 text-3d-layered"
+              className="text-[36px] sm:text-[48px] md:text-[64px] leading-tight font-display font-bold tracking-tight mb-6 px-2 text-white text-3d-layered"
               dangerouslySetInnerHTML={{ __html: t("landing.headline") }}
             />
 

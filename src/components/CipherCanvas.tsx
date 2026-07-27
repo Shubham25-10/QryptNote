@@ -1,7 +1,6 @@
 import { ScrollCamera } from './ScrollCamera';
 import React, { Suspense, useState, useEffect } from 'react';
 import { Canvas } from '@react-three/fiber';
-import { Environment } from '@react-three/drei';
 import CipherShard from './CipherShard';
 import { Loader2 } from 'lucide-react';
 
@@ -117,12 +116,13 @@ export default function CipherCanvas({ intensity = 0, isCracked = false, isHero 
               gl.domElement.addEventListener('webglcontextlost', handleContextLost, false);
             }}
           >
-            <ambientLight intensity={0.5} />
-            <directionalLight position={[10, 10, 5]} intensity={1} color="#5EEAD4" />
-            <directionalLight position={[-10, -10, 5]} intensity={0.5} color="#7C5CFF" />
+            <ambientLight intensity={0.6} />
+            <hemisphereLight args={['#ffffff', '#000000', 0.8]} />
+            <directionalLight position={[10, 10, 5]} intensity={1.2} color="#f43f5e" />
+            <directionalLight position={[-10, -10, 5]} intensity={0.8} color="#ef233c" />
+            <pointLight position={[0, 5, 0]} intensity={1} color="#ffffff" />
             {scrollCamera && <ScrollCamera />}
             <CipherShard intensity={intensity} isCracked={isCracked} isHero={isHero} />
-            <Environment preset="city" />
           </Canvas>
         </Suspense>
       </ErrorBoundary>

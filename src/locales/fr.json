@@ -12,7 +12,7 @@
     "helmet_title": "QryptNote | Envoyez des secrets, pas des captures d'écran",
     "helmet_desc": "Transformez tout message privé en un code QR autodestructeur.",
     "badge": "Stockage chiffré de bout en bout",
-    "headline": "Envoyez des Secrets,<br />Pas des Captures.",
+    "headline": "Envoyez des Secrets,<br /><span class=\"text-[#ef233c] inline-block relative\">Pas des Captures.</span>",
     "subheadline": "Transformez tout message privé en un code QR autodestructeur. Scannez pour lire, puis il disparaît à jamais. Sécurisé, rapide et simple.",
     "create_button": "Créer un message privé",
     "how_it_works": "Comment ça marche",
