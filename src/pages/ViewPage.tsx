@@ -3,7 +3,7 @@ import { PageTransition } from "../components/PageTransition";
 import { withTimeout } from "../lib/utils";
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router';
-import { motion } from 'motion/react';
+import { motion, useScroll, useSpring } from 'motion/react';
 import { Lock, AlertCircle, EyeOff, Loader2, ShieldCheck, ArrowRight, Info } from 'lucide-react';
 import { format } from 'date-fns';
 import { Helmet } from 'react-helmet-async';
@@ -24,6 +24,13 @@ export default function ViewPage() {
   const [decrypting, setDecrypting] = useState(false);
   const [message, setMessage] = useState('');
   const [readAt, setReadAt] = useState<number | null>(null);
+
+  const { scrollYProgress } = useScroll();
+  const scaleX = useSpring(scrollYProgress, {
+    stiffness: 100,
+    damping: 30,
+    restDelta: 0.001
+  });
     
   
   
@@ -343,6 +350,11 @@ export default function ViewPage() {
   if (message) {
     return (
 <PageTransition>
+      {/* Reading Progress Bar */}
+      <motion.div
+        className="fixed top-0 left-0 right-0 h-1 bg-gradient-to-r from-violet via-teal to-violet z-50 origin-left pointer-events-none shadow-[0_0_12px_rgba(239,35,60,0.6)]"
+        style={{ scaleX }}
+      />
       <div className="max-w-3xl mx-auto px-6 py-12 md:py-24">
         {pageHelmet}
         
