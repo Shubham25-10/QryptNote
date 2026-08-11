@@ -8,6 +8,7 @@ import { Lock, AlertCircle, EyeOff, Loader2, ShieldCheck, ArrowRight, Info } fro
 import { format } from 'date-fns';
 import { Helmet } from 'react-helmet-async';
 import { useTranslation } from 'react-i18next';
+import { TypewriterText } from '../components/TypewriterText';
 
 import { doc, getDoc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
@@ -407,8 +408,8 @@ export default function ViewPage() {
           
           <div className={`p-6 md:p-10 transition-all duration-300 relative z-10 `}>
             <div className="prose prose-invert max-w-none select-none" style={{ WebkitUserSelect: 'none', userSelect: 'none' }}>
-              <p className="text-lg md:text-xl text-text-primary whitespace-pre-wrap leading-relaxed font-sans select-none pointer-events-none">
-                {message}
+              <p className="text-lg md:text-xl text-text-primary whitespace-pre-wrap leading-relaxed font-sans select-none">
+                <TypewriterText text={message} />
               </p>
             </div>
           </div>
