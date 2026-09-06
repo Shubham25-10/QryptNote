@@ -22,7 +22,7 @@ import { Helmet } from "react-helmet-async";
 import { useTranslation } from "react-i18next";
 import { useUser } from "../hooks/useUser";
 import { db } from "../firebase";
-import { collection, addDoc, doc, setDoc, getDoc } from "firebase/firestore";
+import { collection, addDoc, doc, setDoc, getDoc, writeBatch } from "firebase/firestore";
 import { nanoid } from "nanoid";
 import { encryptMessage, hashPassword } from "../lib/crypto";
 import { useRazorpay } from '../hooks/useRazorpay';
@@ -89,6 +89,36 @@ export default function CreatePage() {
 
   const isSubmitting = useRef(false);
 
+  const [file, setFile] = useState<{name: string, type: string, data: string} | null>(null);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    
+    const isVideo = f.type.startsWith('video/');
+    const maxSize = isVideo ? 500 * 1024 * 1024 : 10 * 1024 * 1024;
+    const errorMsg = isVideo 
+      ? t('errors.video_too_large', 'Video too large. Maximum size is 500MB.')
+      : t('errors.file_too_large', 'File too large. Maximum size is 10MB.');
+      
+    if (f.size > maxSize) {
+      setError(errorMsg);
+      e.target.value = '';
+      return;
+    }
+    
+    // For very large files, this might take a moment
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setFile({
+        name: f.name,
+        type: f.type,
+        data: event.target?.result as string,
+      });
+    };
+    reader.readAsDataURL(f);
+  };
+
   const submitMessage = async (razorpayOrderId?: string, razorpayPaymentId?: string) => {
     isSubmitting.current = true;
     setIsLoading(true);
@@ -96,7 +126,12 @@ export default function CreatePage() {
 
     try {
       const id = nanoid(8);
-      const { encryptedMessage, secretKey } = encryptMessage(message);
+      let payload = message;
+      if (file) {
+        payload = JSON.stringify({ type: 'v2', text: message, file });
+      }
+      
+      const { encryptedMessage, secretKey } = encryptMessage(payload);
 
       const expiryTimestamp = expiry 
         ? Date.now() + (expiry * 60 * 60 * 1000)
@@ -221,7 +256,7 @@ export default function CreatePage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!message.trim() || isSubmitting.current) return;
+    if ((!message.trim() && !file) || isSubmitting.current) return;
     if (message.length > maxChars) {
       setError(t('errors.msg_too_long', { max: maxChars }));
       return;
@@ -466,9 +501,24 @@ export default function CreatePage() {
               }}
               className="w-full bg-panel border border-hairline rounded-xl p-4 text-base text-text-primary placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-violet focus:border-violet min-h-[200px] resize-y font-sans transition-colors"
               placeholder={t("create.type_here")}
-              required
               maxLength={maxChars}
             />
+          </div>
+
+          <div className="flex items-center gap-4">
+            <label className="cursor-pointer flex items-center gap-2 px-4 py-2 bg-ink border border-hairline rounded-lg text-text-primary hover:bg-panel transition-colors font-sans text-sm">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-violet"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
+              {file ? t('create.change_file', 'Change File') : t('create.attach_file', 'Attach File (Max 500KB)')}
+              <input type="file" className="hidden" onChange={handleFileChange} />
+            </label>
+            {file && (
+              <div className="flex items-center gap-2 px-3 py-1 bg-violet/10 border border-violet/20 rounded text-violet text-sm">
+                <span className="truncate max-w-[150px]">{file.name}</span>
+                <button type="button" onClick={() => setFile(null)} className="hover:text-red-400 transition-colors">
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="bg-panel border border-hairline rounded-2xl p-6 shadow-lg">

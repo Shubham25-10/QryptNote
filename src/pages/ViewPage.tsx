@@ -24,6 +24,7 @@ export default function ViewPage() {
   const [password, setPassword] = useState('');
   const [decrypting, setDecrypting] = useState(false);
   const [message, setMessage] = useState('');
+  const [fileData, setFileData] = useState<{name: string, type: string, data: string} | null>(null);
   const [readAt, setReadAt] = useState<number | null>(null);
 
   const { scrollYProgress } = useScroll();
@@ -42,13 +43,24 @@ export default function ViewPage() {
   useEffect(() => {
     const destroyMessage = async () => {
       // Only destroy if the message has been decrypted and is visible
-      if (message) {
+      if (message || fileData) {
         setMessage('');
+        setFileData(null);
         setError(t('view.destroyed_navigated', 'This message was closed because you navigated away, and can no longer be viewed'));
         if (metadata?.id) {
           try {
             const docRef = doc(db, 'messages', metadata.id);
-            await deleteDoc(docRef);
+            if (metadata.chunkCount > 0) {
+              const { writeBatch } = await import('firebase/firestore');
+              const batch = writeBatch(db);
+              batch.delete(docRef);
+              for (let i = 0; i < metadata.chunkCount; i++) {
+                batch.delete(doc(db, `messages/${metadata.id}/chunks/chunk_${i}`));
+              }
+              await batch.commit();
+            } else {
+              await deleteDoc(docRef);
+            }
           } catch (e) {
             console.error('Failed to destroy document:', e);
           }
@@ -73,7 +85,7 @@ export default function ViewPage() {
       window.removeEventListener('blur', handleWindowBlur);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [message, metadata, t]);
+  }, [message, fileData, metadata, t]);
 
   const fetchMetadata = async () => {
 
@@ -107,7 +119,8 @@ export default function ViewPage() {
         viewLimit: data.viewLimit,
         viewCount: data.viewCount,
         passwordHash: data.passwordHash,
-        encryptedMessage: data.encryptedMessage
+        encryptedMessage: data.encryptedMessage,
+        chunkCount: data.chunkCount || 0
       };
 
       setMetadata(meta);
@@ -154,7 +167,24 @@ export default function ViewPage() {
         throw new Error(t('errors.missing_key'));
       }
 
-      const decrypted = decryptMessage(meta.encryptedMessage, secretKey);
+      let finalEncryptedMessage = meta.encryptedMessage;
+      
+      if (meta.chunkCount && meta.chunkCount > 0) {
+        const { collection, getDocs } = await import('firebase/firestore');
+        const chunksRef = collection(db, 'messages', meta.id, 'chunks');
+        const snapshot = await getDocs(chunksRef);
+        if (snapshot.size !== meta.chunkCount) {
+          throw new Error('Message is incomplete or still processing. Please try again in a few moments.');
+        }
+        const chunks = new Array(meta.chunkCount);
+        snapshot.forEach(docSnap => {
+          const idx = parseInt(docSnap.id.split('_')[1]);
+          chunks[idx] = docSnap.data().data;
+        });
+        finalEncryptedMessage = chunks.join('');
+      }
+
+      const decrypted = decryptMessage(finalEncryptedMessage, secretKey);
       if (!decrypted) { 
         throw new Error(t('errors.decrypt_failed'));
       }
@@ -165,9 +195,28 @@ export default function ViewPage() {
       const newViewCount = meta.viewCount + 1;
       await updateDoc(docRef, { viewCount: newViewCount });
 
+      let textToSet = decrypted;
+      let fileToSet = null;
+      try {
+        const parsed = JSON.parse(decrypted);
+        if (parsed && parsed.type === 'v2') {
+          textToSet = parsed.text || '';
+          if (parsed.file) {
+             fileToSet = parsed.file;
+          }
+        }
+      } catch (e) {
+        // v1 raw text message fallback
+        // Check if it looks like JSON but failed to parse (e.g., truncated)
+        if (decrypted.trim().startsWith('{') && decrypted.length > 10000) {
+          throw new Error('Message is corrupted or incomplete.');
+        }
+      }
+
       setUnsealing(true);
       setTimeout(() => {
-        setMessage(decrypted);
+        setMessage(textToSet);
+        if (fileToSet) setFileData(fileToSet);
         setReadAt(Date.now());
         setUnsealing(false);
       }, 1500); // 1.5s animation
@@ -280,7 +329,7 @@ export default function ViewPage() {
     );
   }
 
-  if (error && !metadata) {
+  if (error && (!metadata || !metadata.isPasswordProtected)) {
     return (
 <PageTransition>
       <div className="min-h-[60vh] flex flex-col items-center justify-center px-6">
@@ -301,7 +350,7 @@ export default function ViewPage() {
   }
 
   // If password protected and not yet decrypted
-  if (metadata?.isPasswordProtected && !message) {
+  if (metadata?.isPasswordProtected && !message && !fileData) {
     return (
 <PageTransition>
       <div className="max-w-md mx-auto px-6 py-24">
@@ -348,7 +397,7 @@ export default function ViewPage() {
     );
   }
 
-  if (message) {
+  if (message || fileData) {
     return (
 <PageTransition>
       {/* Reading Progress Bar */}
@@ -408,9 +457,36 @@ export default function ViewPage() {
           
           <div className={`p-6 md:p-10 transition-all duration-300 relative z-10 `}>
             <div className="prose prose-invert max-w-none select-none" style={{ WebkitUserSelect: 'none', userSelect: 'none' }}>
-              <p className="text-lg md:text-xl text-text-primary whitespace-pre-wrap leading-relaxed font-sans select-none">
-                <TypewriterText text={message} />
-              </p>
+              {message && (
+                <p className="text-lg md:text-xl text-text-primary whitespace-pre-wrap leading-relaxed font-sans select-none mb-6">
+                  <TypewriterText text={message} />
+                </p>
+              )}
+              {fileData && (
+                <div className="mt-4 p-4 bg-ink border border-hairline rounded-xl flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-violet/10 rounded-lg flex items-center justify-center border border-violet/20">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-violet"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+                    </div>
+                    <div>
+                      <p className="font-sans font-medium text-text-primary text-sm truncate max-w-[200px] sm:max-w-[300px]">
+                        {fileData.name}
+                      </p>
+                      <p className="font-sans text-xs text-text-muted">
+                        Secure File Attachment
+                      </p>
+                    </div>
+                  </div>
+                  <a
+                    href={fileData.data}
+                    download={fileData.name}
+                    className="flex items-center gap-2 px-4 py-2 bg-violet hover:bg-violet/90 text-white rounded-lg font-sans text-sm transition-colors shadow-[0_0_10px_rgba(124,92,255,0.2)]"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                    Download
+                  </a>
+                </div>
+              )}
             </div>
           </div>
 

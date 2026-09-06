@@ -152,7 +152,7 @@ export async function createApp() {
     if (req.body && typeof req.body === 'object' && Object.keys(req.body).length > 0) {
       next();
     } else {
-      express.json({ limit: '10mb' })(req, res, next);
+      express.json({ limit: '600mb' })(req, res, next);
     }
   });
 
@@ -192,6 +192,13 @@ export async function createApp() {
       const batch = writeBatch(firestore);
       snapshot.forEach(docSnap => {
         batch.delete(docSnap.ref);
+        const data = docSnap.data();
+        if (data.chunkCount && data.chunkCount > 0) {
+          for (let i = 0; i < data.chunkCount; i++) {
+            const { doc } = require('firebase/firestore/lite');
+            batch.delete(doc(firestore, `messages/${docSnap.id}/chunks/chunk_${i}`));
+          }
+        }
       });
       await batch.commit();
       console.log(`Cleaned up ${snapshot.size} expired messages.`);
@@ -589,9 +596,18 @@ export async function createApp() {
         finalViewLimit = 1;
         finalPasswordHash = null;
       }
+      const CHUNK_SIZE = 800000;
+      const chunks = [];
+      if (encryptedMessage && encryptedMessage.length > CHUNK_SIZE) {
+        for (let i = 0; i < encryptedMessage.length; i += CHUNK_SIZE) {
+          chunks.push(encryptedMessage.substring(i, i + CHUNK_SIZE));
+        }
+      }
+
       const messageDoc: any = {
         id,
-        encryptedMessage,
+        encryptedMessage: chunks.length > 0 ? '' : encryptedMessage,
+        chunkCount: chunks.length,
         expiryTimestamp: finalExpiry,
         viewLimit: finalViewLimit,
         viewCount: 0,
@@ -607,8 +623,33 @@ export async function createApp() {
 
       if (adminFirestore) {
         await adminFirestore.collection('messages').doc(id).set(messageDoc);
+        if (chunks.length > 0) {
+          const batchSize = 10;
+          for (let i = 0; i < chunks.length; i += batchSize) {
+            const batch = adminFirestore.batch();
+            const currentChunks = chunks.slice(i, i + batchSize);
+            currentChunks.forEach((chunkData: string, index: number) => {
+              const chunkRef = adminFirestore.collection('messages').doc(id).collection('chunks').doc(`chunk_${i + index}`);
+              batch.set(chunkRef, { data: chunkData });
+            });
+            await batch.commit();
+          }
+        }
       } else if (firestore) {
         await setDoc(doc(firestore, 'messages', id), messageDoc);
+        if (chunks.length > 0) {
+          const { writeBatch } = await import('firebase/firestore/lite');
+          const batchSize = 10;
+          for (let i = 0; i < chunks.length; i += batchSize) {
+            const batch = writeBatch(firestore);
+            const currentChunks = chunks.slice(i, i + batchSize);
+            currentChunks.forEach((chunkData: string, index: number) => {
+              const chunkRef = doc(firestore, `messages/${id}/chunks/chunk_${i + index}`);
+              batch.set(chunkRef, { data: chunkData });
+            });
+            await batch.commit();
+          }
+        }
       } else {
         throw new Error("No Firestore instance available. Check FIREBASE_SERVICE_ACCOUNT_JSON or VITE_FIREBASE_API_KEY.");
       }
