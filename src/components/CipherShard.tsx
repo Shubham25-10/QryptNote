@@ -41,7 +41,7 @@ function Particles({ count = 500, isHero = false }) {
 
   return (
     <Points ref={points} positions={positions} stride={3} frustumCulled={false}>
-      <PointMaterial transparent color="#7C5CFF" size={0.05} sizeAttenuation={true} depthWrite={false} />
+      <PointMaterial transparent color="red" size={0.05} sizeAttenuation={true} depthWrite={false} />
     </Points>
   );
 }
@@ -88,18 +88,18 @@ export default function CipherShard({ intensity = 0, isCracked = false, isHero =
       }
       
       if (coreMaterial.current) {
-        coreMaterial.current.color.set(hovered.current || isCracked ? "#5EEAD4" : "#7C5CFF");
+        coreMaterial.current.color.set(hovered.current || isCracked ? "#5EEAD4" : "red");
       }
     }
   });
 
   return (
     <group ref={group} dispose={null}>
-      <pointLight position={[0, 0, 0]} color="#7C5CFF" intensity={lightIntensity} distance={5} />
+      <pointLight position={[0, 0, 0]} color="red" intensity={lightIntensity} distance={5} />
       
       {/* Core glowing element */}
       <Icosahedron ref={coreMesh} args={[1, 0]} scale={0.8}>
-        <meshBasicMaterial ref={coreMaterial} color="#7C5CFF" wireframe />
+        <meshBasicMaterial ref={coreMaterial} color="red" wireframe />
       </Icosahedron>
       
       {/* Outer shell */}
@@ -111,7 +111,7 @@ export default function CipherShard({ intensity = 0, isCracked = false, isHero =
       >
         <meshPhysicalMaterial 
           color="#0A0B0F"
-          emissive="#7C5CFF"
+          emissive="red"
           emissiveIntensity={0.1}
           metalness={0.8}
           roughness={0.2}

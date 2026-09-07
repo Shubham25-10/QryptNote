@@ -213,7 +213,12 @@ export default function App() {
 
         {/* Mobile Nav Overlay */}
         {isMobileMenuOpen && (
-          <div className="md:hidden absolute top-16 left-0 w-full bg-ink/95 backdrop-blur-xl border-b border-hairline p-4 flex flex-col gap-4 shadow-xl animate-in slide-in-from-top-2 duration-200">
+          <>
+            <div 
+              className="md:hidden fixed inset-0 top-16 bg-ink/60 backdrop-blur-sm z-40 animate-in fade-in duration-200"
+              onClick={() => setIsMobileMenuOpen(false)}
+            />
+            <div className="md:hidden absolute top-16 left-0 w-full bg-ink/95 backdrop-blur-xl border-b border-hairline p-4 flex flex-col gap-4 shadow-xl animate-in slide-in-from-top-2 duration-200 z-50">
             <div className="flex justify-center gap-4 py-2 border-b border-hairline/50">
               <button
                 onClick={() => changeLanguage("en")}
@@ -250,6 +255,7 @@ export default function App() {
               {t("app.create")}
             </Link>
           </div>
+          </>
         )}
       </nav>
 

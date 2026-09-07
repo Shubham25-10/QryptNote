@@ -16,7 +16,7 @@ const generateParticles = (count: number) => {
   return positions;
 };
 
-const ParticleField = ({ count = 400, color = "#7C5CFF", size = 0.05, speed = 1 }) => {
+const ParticleField = ({ count = 400, color = "red", size = 0.05, speed = 1 }) => {
   const ref = useRef<THREE.Points>(null);
   const positions = useMemo(() => generateParticles(count), [count]);
 

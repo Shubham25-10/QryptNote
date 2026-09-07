@@ -1,3 +1,4 @@
+import { PageTransition } from "../components/PageTransition";
 import { motion } from "motion/react";
 import { useTranslation } from "react-i18next";
 import { Helmet } from "react-helmet-async";
@@ -6,7 +7,8 @@ export default function TermsOfServicePage() {
   const { t } = useTranslation();
 
   return (
-    <div className="max-w-4xl mx-auto px-6 py-12 md:py-24">
+    <PageTransition>
+      <div className="relative z-10 max-w-4xl mx-auto px-6 py-12 md:py-24">
       <Helmet>
         <title>{t('terms_page.title')} | QryptNote</title>
       </Helmet>
@@ -116,5 +118,6 @@ export default function TermsOfServicePage() {
         </div>
       </motion.div>
     </div>
+    </PageTransition>
   );
 }
