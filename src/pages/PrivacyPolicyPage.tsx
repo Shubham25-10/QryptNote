@@ -26,7 +26,7 @@ export default function PrivacyPolicyPage() {
               {t('privacy_page.s1_title')}
             </h2>
             <ul className="list-disc pl-6 space-y-2">
-              <li><strong>Message Content:</strong> {t('privacy_page.s1_p1').replace(/^Message Content:\s*/, '')}</li>
+              <li><strong>Note Content:</strong> {t('privacy_page.s1_p1').replace(/^Message Content:\s*/, '')}</li>
               <li><strong>Technical Data:</strong> {t('privacy_page.s1_p2').replace(/^Technical Data:\s*/, '')}</li>
               <li><strong>Diagnostic Data:</strong> {t('privacy_page.s1_p3').replace(/^Diagnostic Data:\s*/, '')}</li>
               <li><strong>Payment Information:</strong> {t('privacy_page.s1_p4').replace(/^Payment Information:\s*/, '')}</li>

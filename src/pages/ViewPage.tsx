@@ -4,7 +4,7 @@ import { withTimeout } from "../lib/utils";
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router';
 import { motion, useScroll, useSpring } from 'motion/react';
-import { Lock, AlertCircle, EyeOff, Loader2, ShieldCheck, ArrowRight, Info } from 'lucide-react';
+import { Lock, AlertCircle, EyeOff, Loader2, ShieldCheck, ArrowRight, Info, Check, FileText, Image as ImageIcon, FileArchive, FileVideo, FileAudio, FileCode, File as FileIcon } from 'lucide-react';
 import { format } from 'date-fns';
 import { Helmet } from 'react-helmet-async';
 import { useTranslation } from 'react-i18next';
@@ -13,6 +13,24 @@ import { TypewriterText } from '../components/TypewriterText';
 import { doc, getDoc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { decryptMessage, hashPassword } from '../lib/crypto';
+
+const getFileIcon = (fileType: string, fileName: string) => {
+  const type = fileType.toLowerCase();
+  const name = fileName.toLowerCase();
+  
+  if (type.startsWith('image/')) return ImageIcon;
+  if (type.startsWith('video/')) return FileVideo;
+  if (type.startsWith('audio/')) return FileAudio;
+  
+  if (type === 'application/pdf') return FileText;
+  if (type.includes('zip') || type.includes('rar') || type.includes('tar') || type.includes('compressed') || name.endsWith('.zip') || name.endsWith('.rar') || name.endsWith('.tar.gz') || name.endsWith('.7z')) return FileArchive;
+  
+  if (type.includes('json') || type.includes('javascript') || type.includes('html') || type.includes('xml') || type.includes('code') || name.endsWith('.tsx') || name.endsWith('.ts') || name.endsWith('.js') || name.endsWith('.jsx') || name.endsWith('.html') || name.endsWith('.css') || name.endsWith('.json')) return FileCode;
+  
+  if (type.startsWith('text/') || name.endsWith('.txt') || name.endsWith('.md') || name.endsWith('.csv')) return FileText;
+  
+  return FileIcon;
+};
 
 export default function ViewPage() {
   const { t } = useTranslation();
@@ -23,6 +41,8 @@ export default function ViewPage() {
   
   const [password, setPassword] = useState('');
   const [decrypting, setDecrypting] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [downloadSuccess, setDownloadSuccess] = useState(false);
   const [message, setMessage] = useState('');
   const [fileData, setFileData] = useState<{name: string, type: string, data: string} | null>(null);
   const [readAt, setReadAt] = useState<number | null>(null);
@@ -91,7 +111,7 @@ export default function ViewPage() {
 
     try {
       setLoading(true);
-      if (!id) throw new Error('Message not found');
+      if (!id) throw new Error('Note not found');
 
       const docRef = doc(db, 'messages', id);
       const docSnap = await withTimeout(getDoc(docRef), 15000, t('errors.network_timeout'));
@@ -174,7 +194,7 @@ export default function ViewPage() {
         const chunksRef = collection(db, 'messages', meta.id, 'chunks');
         const snapshot = await getDocs(chunksRef);
         if (snapshot.size !== meta.chunkCount) {
-          throw new Error('Message is incomplete or still processing. Please try again in a few moments.');
+          throw new Error('Note is incomplete or still processing. Please try again in a few moments.');
         }
         const chunks = new Array(meta.chunkCount);
         snapshot.forEach(docSnap => {
@@ -209,7 +229,7 @@ export default function ViewPage() {
         // v1 raw text message fallback
         // Check if it looks like JSON but failed to parse (e.g., truncated)
         if (decrypted.trim().startsWith('{') && decrypted.length > 10000) {
-          throw new Error('Message is corrupted or incomplete.');
+          throw new Error('Note is corrupted or incomplete.');
         }
       }
 
@@ -229,19 +249,57 @@ export default function ViewPage() {
   };
 
   
-  let dynamicTitle = t('view.helmet_title') || 'Secure Message - QryptNote';
-  let dynamicDesc = t('view.helmet_desc') || 'You have received a secure, self-destructing message.';
+  const handleDownload = async () => {
+    if (!fileData || isDownloading || downloadSuccess) return;
+    setIsDownloading(true);
+    
+    try {
+      // Use native fetch to convert data URI to Blob. 
+      // This is highly optimized in browsers and runs off the main thread,
+      // avoiding memory crashes and UI freezing with 500MB files.
+      const response = await fetch(fileData.data);
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileData.name || 'download';
+      document.body.appendChild(a);
+      a.click();
+      
+      setTimeout(() => {
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+        setIsDownloading(false);
+        setDownloadSuccess(true);
+        setTimeout(() => setDownloadSuccess(false), 2000);
+      }, 100);
+    } catch (err) {
+      console.error("Download Blob conversion failed, falling back to basic data URI", err);
+      // Fallback
+      const a = document.createElement('a');
+      a.href = fileData.data;
+      a.download = fileData.name || 'download';
+      a.click();
+      setIsDownloading(false);
+      setDownloadSuccess(true);
+      setTimeout(() => setDownloadSuccess(false), 2000);
+    }
+  };
+
+  let dynamicTitle = t('view.helmet_title') || 'Secure Note - QryptNote';
+  let dynamicDesc = t('view.helmet_desc') || 'You have received a secure, self-destructing note.';
   
-  if (error === t('errors.msg_not_found') || error === "Message not found or expired.") {
-    dynamicTitle = "Message Expired - QryptNote";
-    dynamicDesc = "This message has expired and is no longer available.";
-  } else if (error === t('errors.msg_view_limit') || error === "Message has reached its view limit.") {
-    dynamicTitle = "Message Destroyed - QryptNote";
-    dynamicDesc = "This message has reached its view limit and has been destroyed.";
+  if (error === t('errors.msg_not_found') || error === "Note not found or expired.") {
+    dynamicTitle = "Note Expired - QryptNote";
+    dynamicDesc = "This note has expired and is no longer available.";
+  } else if (error === t('errors.msg_view_limit') || error === "Note has reached its view limit.") {
+    dynamicTitle = "Note Destroyed - QryptNote";
+    dynamicDesc = "This note has reached its view limit and has been destroyed.";
   } else if (metadata) {
     if (metadata.viewLimit !== -1 && metadata.viewCount >= metadata.viewLimit) {
-      dynamicTitle = "Message Destroyed - QryptNote";
-      dynamicDesc = "This message has reached its view limit and has been destroyed.";
+      dynamicTitle = "Note Destroyed - QryptNote";
+      dynamicDesc = "This note has reached its view limit and has been destroyed.";
     }
   }
 
@@ -337,7 +395,7 @@ export default function ViewPage() {
         <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mb-6 border border-red-500/20 shadow-[0_0_15px_rgba(239,68,68,0.2)]">
           <EyeOff className="w-8 h-8 text-red-500" />
         </div>
-        <h1 className="text-3xl font-display font-bold mb-2 text-center text-text-primary">{t('view.err_title', 'Message Unavailable')}</h1>
+        <h1 className="text-3xl font-display font-bold mb-2 text-center text-text-primary">{t('view.err_title', 'Note Unavailable')}</h1>
         <p className="text-text-muted max-w-md text-center mb-8 font-sans">
           {error}
         </p>
@@ -466,7 +524,10 @@ export default function ViewPage() {
                 <div className="mt-4 p-4 bg-ink border border-hairline rounded-xl flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-violet/10 rounded-lg flex items-center justify-center border border-violet/20">
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-violet"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+                      {(() => {
+                        const IconComponent = getFileIcon(fileData.type, fileData.name);
+                        return <IconComponent className="w-5 h-5 text-violet" />;
+                      })()}
                     </div>
                     <div>
                       <p className="font-sans font-medium text-text-primary text-sm truncate max-w-[200px] sm:max-w-[300px]">
@@ -477,14 +538,40 @@ export default function ViewPage() {
                       </p>
                     </div>
                   </div>
-                  <a
-                    href={fileData.data}
-                    download={fileData.name}
-                    className="flex items-center gap-2 px-4 py-2 bg-violet hover:bg-violet/90 text-white rounded-lg font-sans text-sm transition-colors shadow-[0_0_10px_rgba(124,92,255,0.2)]"
+                  <button
+                    onClick={handleDownload}
+                    disabled={isDownloading || downloadSuccess}
+                    className="flex items-center gap-2 px-4 py-2 bg-violet hover:bg-violet/90 text-white rounded-lg font-sans text-sm transition-colors shadow-[0_0_10px_rgba(124,92,255,0.2)] disabled:opacity-70 disabled:cursor-not-allowed min-w-[120px] justify-center overflow-hidden relative"
                   >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-                    Download
-                  </a>
+                    {isDownloading ? (
+                      <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="flex items-center gap-2"
+                      >
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        {t('view.downloading', 'Downloading...')}
+                      </motion.div>
+                    ) : downloadSuccess ? (
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.8 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="flex items-center gap-2 text-white"
+                      >
+                        <Check className="w-4 h-4" />
+                        {t('view.downloaded', 'Downloaded')}
+                      </motion.div>
+                    ) : (
+                      <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        className="flex items-center gap-2"
+                      >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                        {t('view.download', 'Download')}
+                      </motion.div>
+                    )}
+                  </button>
                 </div>
               )}
             </div>

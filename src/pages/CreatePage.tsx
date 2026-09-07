@@ -216,7 +216,7 @@ export default function CreatePage() {
         amount: orderData.amount,
         currency: orderData.currency,
         name: "QryptNote",
-        description: "Pay-As-You-Go Message",
+        description: "Pay-As-You-Go Note",
         handler: async function (response: any) {
           try {
             const verifyRes = await fetch('/api/verify-payment', {
@@ -508,7 +508,7 @@ export default function CreatePage() {
           <div className="flex items-center gap-4">
             <label className="cursor-pointer flex items-center gap-2 px-4 py-2 bg-ink border border-hairline rounded-lg text-text-primary hover:bg-panel transition-colors font-sans text-sm">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-violet"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
-              {file ? t('create.change_file', 'Change File') : t('create.attach_file', 'Attach File (Max 500KB)')}
+              {file ? t('create.change_file', 'Change File') : t('create.attach_file', 'Attach File (Max 10MB/500MB)')}
               <input type="file" className="hidden" onChange={handleFileChange} />
             </label>
             {file && (

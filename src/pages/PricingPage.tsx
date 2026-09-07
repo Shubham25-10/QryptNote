@@ -278,10 +278,10 @@ export default function PricingPage() {
           >
             <h4 className="font-display font-bold text-text-primary mb-2">How Pay-As-You-Go Works</h4>
             <p className="text-text-muted text-sm mb-4">
-              You don't need a subscription to use Pro features. Simply go to the Create Message page, select any Pro feature (like Custom Expiry or Password Protection), and you'll be prompted to pay a one-time fee of $1 per message via Razorpay.
+              You don't need a subscription to use Pro features. Simply go to the Create Note page, select any Pro feature (like Custom Expiry or Password Protection), and you'll be prompted to pay a one-time fee of $1 per note via Razorpay.
             </p>
             <Link to="/create" className="text-amber font-medium text-sm hover:underline">
-              Go to Create Message &rarr;
+              Go to Create Note &rarr;
             </Link>
           </motion.div>
         )}
