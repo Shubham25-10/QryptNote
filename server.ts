@@ -8,6 +8,7 @@ import fs from 'fs';
 import cors from 'cors';
 
 import Razorpay from 'razorpay';
+import multer from 'multer';
 import { initializeApp as initAdminApp, applicationDefault, cert, getApps } from 'firebase-admin/app';
 import { getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
 
@@ -550,6 +551,38 @@ export async function createApp() {
     }
     return template;
   };
+
+  const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } }); // 10MB individual chunk limit
+
+  app.post('/api/upload-chunk', upload.single('chunk'), async (req, res) => {
+    try {
+      const { id, chunkIndex } = req.body;
+      if (!id || chunkIndex === undefined) {
+        return res.status(400).json({ error: 'Missing metadata' });
+      }
+
+      if (!req.file) {
+        return res.status(400).json({ error: 'Missing chunk file' });
+      }
+
+      const chunkData = req.file.buffer.toString('utf-8');
+      const adminFirestore = getAdminFirestoreInstance();
+
+      if (adminFirestore) {
+        await adminFirestore.collection('messages').doc(id).collection('chunks').doc(`chunk_${chunkIndex}`).set({ data: chunkData });
+      } else if (firestore) {
+        const chunkRef = doc(firestore, `messages/${id}/chunks/chunk_${chunkIndex}`);
+        await setDoc(chunkRef, { data: chunkData });
+      } else {
+        throw new Error("Database not initialized");
+      }
+
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error("Error uploading chunk:", err);
+      res.status(500).json({ error: err.message || 'Chunk upload failed' });
+    }
+  });
 
   app.post('/api/create-message', async (req, res) => {
     try {

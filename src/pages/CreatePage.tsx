@@ -191,17 +191,25 @@ export default function CreatePage() {
         throw new Error(errorData.error || t('errors.network_timeout'));
       }
 
-      // If we chunked the file on the client, write chunks directly to Firestore
+      // If we chunked the file on the client, upload chunks to the server
       if (clientChunks.length > 0) {
-        const batchSize = 10;
-        for (let i = 0; i < clientChunks.length; i += batchSize) {
-          const batch = writeBatch(db);
-          const currentChunks = clientChunks.slice(i, i + batchSize);
-          currentChunks.forEach((chunkData, index) => {
-            const chunkRef = doc(db, `messages/${id}/chunks/chunk_${i + index}`);
-            batch.set(chunkRef, { data: chunkData });
+        // Upload sequentially or in small parallel batches to avoid overwhelming the server
+        for (let i = 0; i < clientChunks.length; i++) {
+          const formData = new FormData();
+          formData.append('id', id);
+          formData.append('chunkIndex', i.toString());
+          // Create a Blob from the chunk string and append as file
+          const blob = new Blob([clientChunks[i]], { type: 'text/plain' });
+          formData.append('chunk', blob, `chunk_${i}.txt`);
+
+          const chunkRes = await fetch('/api/upload-chunk', {
+            method: 'POST',
+            body: formData,
           });
-          await batch.commit();
+
+          if (!chunkRes.ok) {
+            throw new Error(`Failed to upload file chunk ${i + 1} of ${clientChunks.length}`);
+          }
         }
       }
 
