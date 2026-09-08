@@ -1,0 +1,41 @@
+--- server.ts
++++ server.ts
+@@ -628,7 +628,7 @@
+       const adminFirestore = getAdminFirestoreInstance();
+       console.log("ENCRYPTION_KEY present:", !!process.env.ENCRYPTION_KEY);
+       console.log("FIREBASE_SERVICE_ACCOUNT_JSON present:", !!process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
+-      const { id, encryptedMessage, expiryTimestamp, viewLimit, passwordHash, userId, chunkCount: clientChunkCount } = req.body;
++      const { id, encryptedMessage, expiryTimestamp, viewLimit, passwordHash, userId, chunkCount: clientChunkCount, iv, salt } = req.body;
+ 
+       if (!id || (encryptedMessage === undefined && clientChunkCount === undefined)) {
+         return res.status(400).json({ error: 'Missing id or encryptedMessage' });
+@@ -668,14 +668,18 @@
+       }
+       const finalChunkCount = clientChunkCount !== undefined ? clientChunkCount : chunks.length;
+       
++      const destructionToken = crypto.randomBytes(32).toString('hex');
++
+       const messageDoc: any = {
+         id,
+         encryptedMessage: (chunks.length > 0 || finalChunkCount > 0) ? '' : (encryptedMessage || ''),
++        iv,
++        salt: salt || null,
+         chunkCount: finalChunkCount,
+         expiryTimestamp: finalExpiry,
+         viewLimit: finalViewLimit,
+         viewCount: 0,
+         passwordHash: finalPasswordHash,
+         createdAt: Date.now(),
++        destructionToken
+       };
+       
+       if (req.body.paidFeatureUnlock) {
+@@ -706,7 +710,7 @@
+       } else {
+         throw new Error("No Firestore instance available. Check FIREBASE_SERVICE_ACCOUNT_JSON or VITE_FIREBASE_API_KEY.");
+       }
+-      res.json({ success: true, messageDoc });
++      res.json({ success: true, messageDoc, destructionToken });
+     } catch (err: any) {
+       console.error("Error creating message:", err);
+       res.status(500).json({ error: err.message || 'Server error' });

@@ -1,0 +1,25 @@
+      const CHUNK_SIZE = 800000;
+      const chunks = [];
+      if (encryptedMessage && encryptedMessage.length > CHUNK_SIZE) {
+        for (let i = 0; i < encryptedMessage.length; i += CHUNK_SIZE) {
+          chunks.push(encryptedMessage.substring(i, i + CHUNK_SIZE));
+        }
+      }
+
+      const finalChunkCount = clientChunkCount !== undefined ? clientChunkCount : chunks.length;
+      
+      const messageDoc: any = {
+        id,
+        encryptedMessage: (chunks.length > 0 || finalChunkCount > 0) ? '' : (encryptedMessage || ''),
+        chunkCount: finalChunkCount,
+        expiryTimestamp: finalExpiry,
+        viewLimit: finalViewLimit,
+        viewCount: 0,
+        passwordHash: finalPasswordHash,
+        createdAt: Date.now()
+      };
+      
+      if (req.body.paidFeatureUnlock) {
+        messageDoc.paidFeatureUnlock = true;
+        messageDoc.razorpayOrderId = req.body.razorpayOrderId;
+        messageDoc.razorpayPaymentId = req.body.razorpayPaymentId;

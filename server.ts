@@ -146,6 +146,13 @@ function getRazorpayInstance() {
 
 export async function createApp() {
   const app = express();
+app.use((req, res, next) => {
+  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://checkout.razorpay.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' wss: ws: https://firestore.googleapis.com https://securetoken.googleapis.com https://identitytoolkit.googleapis.com https://checkout.razorpay.com; font-src 'self' data:; frame-src 'self' https://api.razorpay.com;");
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  next();
+});
   app.set('trust proxy', 1);
 
 
@@ -584,13 +591,200 @@ export async function createApp() {
     }
   });
 
+  app.get('/api/messages/:id/metadata', async (req, res) => {
+    try {
+       const { id } = req.params;
+       const adminFirestore = getAdminFirestoreInstance();
+       if (!adminFirestore) {
+         const docRef = doc(firestore, 'messages', id);
+         const docSnap = await getDoc(docRef);
+         if (!docSnap.exists()) return res.status(404).json({ error: 'Message not found' });
+         const data = docSnap.data();
+         return res.json({ id, hasPassword: !!data.passwordHash, createdAt: data.createdAt, viewLimit: data.viewLimit, viewCount: data.viewCount });
+       }
+       const docSnap = await adminFirestore.collection('messages').doc(id).get();
+       if (!docSnap.exists) return res.status(404).json({ error: 'Message not found' });
+       const data = docSnap.data()!;
+       if (data.expiryTimestamp && Date.now() > data.expiryTimestamp) {
+          await adminFirestore.collection('messages').doc(id).delete();
+          return res.status(404).json({ error: 'Message expired' });
+       }
+       if (data.viewLimit !== -1 && data.viewCount >= data.viewLimit) {
+          await adminFirestore.collection('messages').doc(id).delete();
+          return res.status(404).json({ error: 'Message destroyed' });
+       }
+       res.json({ id, hasPassword: !!data.passwordHash, createdAt: data.createdAt, viewLimit: data.viewLimit, viewCount: data.viewCount });
+    } catch (err) {
+       console.error(err);
+       res.status(500).json({ error: 'Server error' });
+    }
+  });
+
+  app.get('/api/messages/:id/chunks', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const adminFirestore = getAdminFirestoreInstance();
+      if (!adminFirestore) {
+         // Lite mode fallback
+         const { getDocs, collection: col } = await import('firebase/firestore/lite');
+         const snapshot = await getDocs(col(firestore, `messages/${id}/chunks`));
+         const chunks = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+         return res.json({ chunks });
+      }
+      const snapshot = await adminFirestore.collection('messages').doc(id).collection('chunks').get();
+      const chunks = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      res.json({ chunks });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Server error' });
+    }
+  });
+
+  app.post('/api/reveal-message', async (req, res) => {
+    try {
+      const { id, passwordHash } = req.body;
+      if (!id) return res.status(400).json({ error: 'Missing id' });
+
+      const adminFirestore = getAdminFirestoreInstance();
+      if (!adminFirestore) {
+        // Fallback for lite SDK
+        const docRef = doc(firestore, 'messages', id);
+        const docSnap = await getDoc(docRef);
+        if (!docSnap.exists()) return res.status(404).json({ error: 'Message not found' });
+        const data = docSnap.data();
+        if (data.expiryTimestamp && Date.now() > data.expiryTimestamp) {
+           await deleteDoc(docRef);
+           return res.status(404).json({ error: 'Message expired' });
+        }
+        if (data.passwordHash && data.passwordHash !== passwordHash) {
+           return res.status(401).json({ error: 'Invalid password' });
+        }
+        if (data.viewLimit !== -1 && data.viewCount >= data.viewLimit) {
+           await deleteDoc(docRef);
+           return res.status(404).json({ error: 'Message destroyed' });
+        }
+        
+        const newViewCount = data.viewCount + 1;
+        if (data.viewLimit !== -1 && newViewCount >= data.viewLimit) {
+           await deleteDoc(docRef);
+           // Try to delete chunks if they exist
+           if (data.chunkCount > 0) {
+             const { writeBatch } = await import('firebase/firestore/lite');
+             for (let i = 0; i < data.chunkCount; i += 10) {
+                const batch = writeBatch(firestore);
+                const limit = Math.min(10, data.chunkCount - i);
+                for(let j=0; j<limit; j++) {
+                  batch.delete(doc(firestore, `messages/${id}/chunks/chunk_${i+j}`));
+                }
+                await batch.commit();
+             }
+           }
+        } else {
+           await updateDoc(docRef, { viewCount: newViewCount });
+        }
+        return res.json({ encryptedMessage: data.encryptedMessage, iv: data.iv, salt: data.salt, chunkCount: data.chunkCount });
+      }
+
+      let payloadData: any = null;
+      let shouldDeleteChunks = false;
+      let chunkCount = 0;
+
+      await adminFirestore.runTransaction(async (t) => {
+        const docRef = adminFirestore.collection('messages').doc(id);
+        const docSnap = await t.get(docRef);
+        if (!docSnap.exists) {
+          throw new Error('NOT_FOUND');
+        }
+        const data = docSnap.data()!;
+        if (data.expiryTimestamp && Date.now() > data.expiryTimestamp) {
+          t.delete(docRef);
+          shouldDeleteChunks = true;
+          chunkCount = data.chunkCount || 0;
+          throw new Error('NOT_FOUND');
+        }
+        if (data.passwordHash && data.passwordHash !== passwordHash) {
+          throw new Error('INVALID_PASSWORD');
+        }
+        if (data.viewLimit !== -1 && data.viewCount >= data.viewLimit) {
+          t.delete(docRef);
+          shouldDeleteChunks = true;
+          chunkCount = data.chunkCount || 0;
+          throw new Error('NOT_FOUND');
+        }
+
+        const newViewCount = (data.viewCount || 0) + 1;
+        if (data.viewLimit !== -1 && newViewCount >= data.viewLimit) {
+          t.delete(docRef);
+          shouldDeleteChunks = true;
+          chunkCount = data.chunkCount || 0;
+        } else {
+          t.update(docRef, { viewCount: newViewCount });
+        }
+        payloadData = { encryptedMessage: data.encryptedMessage, iv: data.iv, salt: data.salt, chunkCount: data.chunkCount || 0 };
+      });
+
+      if (shouldDeleteChunks && chunkCount > 0) {
+         // Delete chunks in background
+         (async () => {
+           for (let i = 0; i < chunkCount; i += 10) {
+             const batch = adminFirestore.batch();
+             const limit = Math.min(10, chunkCount - i);
+             for(let j=0; j<limit; j++) {
+               batch.delete(adminFirestore.collection('messages').doc(id).collection('chunks').doc(`chunk_${i+j}`));
+             }
+             await batch.commit();
+           }
+         })().catch(console.error);
+      }
+
+      res.json(payloadData);
+    } catch (err: any) {
+      if (err.message === 'NOT_FOUND') return res.status(404).json({ error: 'Message not found' });
+      if (err.message === 'INVALID_PASSWORD') return res.status(401).json({ error: 'Invalid password' });
+      console.error(err);
+      res.status(500).json({ error: 'Server error' });
+    }
+  });
+
+  app.post('/api/delete-message', async (req, res) => {
+     try {
+        const { id, destructionToken } = req.body;
+        if (!id || !destructionToken) return res.status(400).json({ error: 'Missing id or token' });
+        const adminFirestore = getAdminFirestoreInstance();
+        if (!adminFirestore) {
+           return res.status(500).json({ error: 'Not supported in lite mode' });
+        }
+        const docRef = adminFirestore.collection('messages').doc(id);
+        const docSnap = await docRef.get();
+        if (!docSnap.exists) return res.status(404).json({ error: 'Not found' });
+        if (docSnap.data()?.destructionToken !== destructionToken) return res.status(403).json({ error: 'Invalid token' });
+        
+        const chunkCount = docSnap.data()?.chunkCount || 0;
+        await docRef.delete();
+        if (chunkCount > 0) {
+           for (let i = 0; i < chunkCount; i += 10) {
+             const batch = adminFirestore.batch();
+             const limit = Math.min(10, chunkCount - i);
+             for(let j=0; j<limit; j++) {
+               batch.delete(adminFirestore.collection('messages').doc(id).collection('chunks').doc(`chunk_${i+j}`));
+             }
+             await batch.commit();
+           }
+        }
+        res.json({ success: true });
+     } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Server error' });
+     }
+  });
+
   app.post('/api/create-message', async (req, res) => {
     try {
       const adminFirestore = getAdminFirestoreInstance();
       console.log("ENCRYPTION_KEY present:", !!process.env.ENCRYPTION_KEY);
       console.log("FIREBASE_SERVICE_ACCOUNT_JSON present:", !!process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
 
-      const { id, encryptedMessage, expiryTimestamp, viewLimit, passwordHash, userId, chunkCount: clientChunkCount } = req.body;
+      const { id, encryptedMessage, expiryTimestamp, viewLimit, passwordHash, userId, chunkCount: clientChunkCount, iv, salt } = req.body;
       if (!id || (encryptedMessage === undefined && clientChunkCount === undefined)) {
         return res.status(400).json({ error: 'Missing id or encryptedMessage' });
       }
@@ -639,9 +833,14 @@ export async function createApp() {
 
       const finalChunkCount = clientChunkCount !== undefined ? clientChunkCount : chunks.length;
       
+      const destructionToken = crypto.randomBytes(32).toString('hex');
+
       const messageDoc: any = {
         id,
         encryptedMessage: (chunks.length > 0 || finalChunkCount > 0) ? '' : (encryptedMessage || ''),
+        iv,
+        salt: salt || null,
+        destructionToken,
         chunkCount: finalChunkCount,
         expiryTimestamp: finalExpiry,
         viewLimit: finalViewLimit,
@@ -658,37 +857,25 @@ export async function createApp() {
 
       if (adminFirestore) {
         await adminFirestore.collection('messages').doc(id).set(messageDoc);
-        if (chunks.length > 0) {
-          const batchSize = 10;
-          for (let i = 0; i < chunks.length; i += batchSize) {
-            const batch = adminFirestore.batch();
-            const currentChunks = chunks.slice(i, i + batchSize);
-            currentChunks.forEach((chunkData: string, index: number) => {
-              const chunkRef = adminFirestore.collection('messages').doc(id).collection('chunks').doc(`chunk_${i + index}`);
-              batch.set(chunkRef, { data: chunkData });
-            });
-            await batch.commit();
-          }
+        for (let i = 0; i < chunks.length; i += 10) {
+          const batch = adminFirestore.batch();
+          chunks.slice(i, i + 10).forEach((c, idx) => batch.set(adminFirestore.collection('messages').doc(id).collection('chunks').doc(`chunk_${i + idx}`), { data: c }));
+          await batch.commit();
         }
       } else if (firestore) {
         await setDoc(doc(firestore, 'messages', id), messageDoc);
         if (chunks.length > 0) {
           const { writeBatch } = await import('firebase/firestore/lite');
-          const batchSize = 10;
-          for (let i = 0; i < chunks.length; i += batchSize) {
+          for (let i = 0; i < chunks.length; i += 10) {
             const batch = writeBatch(firestore);
-            const currentChunks = chunks.slice(i, i + batchSize);
-            currentChunks.forEach((chunkData: string, index: number) => {
-              const chunkRef = doc(firestore, `messages/${id}/chunks/chunk_${i + index}`);
-              batch.set(chunkRef, { data: chunkData });
-            });
+            chunks.slice(i, i + 10).forEach((c, idx) => batch.set(doc(firestore, `messages/${id}/chunks/chunk_${i + idx}`), { data: c }));
             await batch.commit();
           }
         }
       } else {
         throw new Error("No Firestore instance available. Check FIREBASE_SERVICE_ACCOUNT_JSON or VITE_FIREBASE_API_KEY.");
       }
-      res.json({ success: true, messageDoc });
+      res.json({ success: true, messageDoc, destructionToken });
     } catch (error: any) {
       console.error("create-message error:", error);
       return res.status(500).json({ error: "Failed to create message", details: error.message || error.toString() });

@@ -109,7 +109,8 @@ export default function CipherCanvas({ intensity = 0, isCracked = false, isHero 
         </div>
       }>
         <Suspense fallback={<div className="w-full h-full flex items-center justify-center"><Loader2 className="w-6 h-6 text-violet animate-spin opacity-50" /></div>}>
-          <Canvas 
+          <div style={{ perspective: "1000px" }} className="w-full h-full">
+            <Canvas style={{ transform: "rotateX(15deg) rotateY(-20deg) scale(1.1)", filter: "drop-shadow(0 20px 30px rgba(239, 35, 60, 0.4))", transition: "transform 0.5s ease" }} 
             camera={{ position: [0, 0, 5], fov: 45 }} 
             dpr={[1, pixelRatio]}
             onCreated={({ gl }) => {
@@ -124,6 +125,7 @@ export default function CipherCanvas({ intensity = 0, isCracked = false, isHero 
             {scrollCamera && <ScrollCamera />}
             <CipherShard intensity={intensity} isCracked={isCracked} isHero={isHero} />
           </Canvas>
+          </div>
         </Suspense>
       </ErrorBoundary>
     </div>

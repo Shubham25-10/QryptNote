@@ -1,17 +1,13 @@
 import { MagneticElement } from "../components/MagneticElement";
 import { PageTransition } from "../components/PageTransition";
-import { withTimeout } from "../lib/utils";
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router';
-import { motion, useScroll, useSpring } from 'motion/react';
-import { Lock, AlertCircle, EyeOff, Loader2, ShieldCheck, ArrowRight, Info, Check, FileText, Image as ImageIcon, FileArchive, FileVideo, FileAudio, FileCode, File as FileIcon } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { Lock, EyeOff, Loader2, ShieldCheck, ArrowRight, Info, Check, AlertCircle, FileText, FileArchive, FileCode, FileVideo, FileAudio, Image as ImageIcon, File as FileIcon } from 'lucide-react';
 import { format } from 'date-fns';
 import { Helmet } from 'react-helmet-async';
 import { useTranslation } from 'react-i18next';
 import { TypewriterText } from '../components/TypewriterText';
-
-import { doc, getDoc, deleteDoc, updateDoc } from 'firebase/firestore';
-import { db } from '../firebase';
 import { decryptMessage, hashPassword } from '../lib/crypto';
 
 const getFileIcon = (fileType: string, fileName: string) => {
@@ -35,473 +31,235 @@ const getFileIcon = (fileType: string, fileName: string) => {
 export default function ViewPage() {
   const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
+  
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [metadata, setMetadata] = useState<any>(null);
-  
   const [password, setPassword] = useState('');
   const [decrypting, setDecrypting] = useState(false);
-  const [isDownloading, setIsDownloading] = useState(false);
-  const [downloadSuccess, setDownloadSuccess] = useState(false);
   const [message, setMessage] = useState('');
   const [fileData, setFileData] = useState<{name: string, type: string, data: string} | null>(null);
+  
+  // Anti-Screenshot / Ephemeral State
+  const [revealed, setRevealed] = useState(false);
+  const [holding, setHolding] = useState(false);
   const [readAt, setReadAt] = useState<number | null>(null);
+  const [timeLeft, setTimeLeft] = useState(30);
 
-  const { scrollYProgress } = useScroll();
-  const scaleX = useSpring(scrollYProgress, {
-    stiffness: 100,
-    damping: 30,
-    restDelta: 0.001
-  });
-    
-  
-  
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [downloadSuccess, setDownloadSuccess] = useState(false);
+
   useEffect(() => {
     fetchMetadata();
   }, [id]);
 
   useEffect(() => {
-    const destroyMessage = async () => {
-      // Only destroy if the message has been decrypted and is visible
-      if (message || fileData) {
-        setMessage('');
-        setFileData(null);
-        setError(t('view.destroyed_navigated', 'This message was closed because you navigated away, and can no longer be viewed'));
-        if (metadata?.id) {
-          try {
-            const docRef = doc(db, 'messages', metadata.id);
-            if (metadata.chunkCount > 0) {
-              const { writeBatch } = await import('firebase/firestore');
-              const batch = writeBatch(db);
-              batch.delete(docRef);
-              for (let i = 0; i < metadata.chunkCount; i++) {
-                batch.delete(doc(db, `messages/${metadata.id}/chunks/chunk_${i}`));
-              }
-              await batch.commit();
-            } else {
-              await deleteDoc(docRef);
-            }
-          } catch (e) {
-            console.error('Failed to destroy document:', e);
-          }
-        }
-      }
-    };
-
-    const handleVisibilityChange = () => {
-      if (document.hidden) {
-        destroyMessage();
-      }
-    };
-
-    const handleWindowBlur = () => {
-      destroyMessage();
-    };
-
-    window.addEventListener('blur', handleWindowBlur);
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    return () => {
-      window.removeEventListener('blur', handleWindowBlur);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [message, fileData, metadata, t]);
+    let timer: any;
+    if (revealed && timeLeft > 0) {
+      timer = setTimeout(() => setTimeLeft(prev => prev - 1), 1000);
+    } else if (timeLeft === 0 && message) {
+      setMessage('');
+      setFileData(null);
+      setError('Time limit expired. The message has been removed from your screen.');
+    }
+    return () => clearTimeout(timer);
+  }, [revealed, timeLeft, message]);
 
   const fetchMetadata = async () => {
-
     try {
       setLoading(true);
-      if (!id) throw new Error('Note not found');
-
-      const docRef = doc(db, 'messages', id);
-      const docSnap = await withTimeout(getDoc(docRef), 15000, t('errors.network_timeout'));
-      
-      if (!docSnap.exists()) {
-        throw new Error(t('errors.msg_not_found'));
-      }
-      
-      const data = docSnap.data();
-
-      // Check expiry
-      if (data.expiryTimestamp && Date.now() > data.expiryTimestamp) {
-        throw new Error(t('errors.msg_not_found'));
-      }
-
-      // Check view limit
-      if (data.viewLimit !== -1 && data.viewCount >= data.viewLimit) {
-        throw new Error(t('errors.msg_view_limit'));
-      }
-
-      const meta = {
-        id: data.id,
-        isPasswordProtected: !!data.passwordHash,
-        createdAt: data.createdAt,
-        viewLimit: data.viewLimit,
-        viewCount: data.viewCount,
-        passwordHash: data.passwordHash,
-        encryptedMessage: data.encryptedMessage,
-        chunkCount: data.chunkCount || 0
-      };
-
-      setMetadata(meta);
-      
-      // If no password needed, attempt to view directly
-      if (!meta.isPasswordProtected) {
-        await handleViewMessage(undefined, meta);
-      }
-
+      const res = await fetch(`/api/messages/${id}/metadata`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Message not found');
+      setMetadata(data);
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || 'Error fetching message');
     } finally {
       setLoading(false);
     }
   };
 
-  const [unsealing, setUnsealing] = useState(false);
-  const isSubmitting = useRef(false);
-
-  const handleViewMessage = async (e?: React.FormEvent, directMeta?: any) => {
+  const handleReveal = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (isSubmitting.current) return;
+    setDecrypting(true);
+    setError('');
     
-    const meta = directMeta || metadata;
-    if (!meta) return;
-
     try {
-      isSubmitting.current = true;
-      setDecrypting(true);
-      setError('');
-      
-      // Check password
-      if (meta.isPasswordProtected) {
-        if (!password) {
-          throw new Error(t('errors.pass_required'));
-        }
-        if (hashPassword(password) !== meta.passwordHash) {
-          throw new Error(t('errors.pass_incorrect'));
-        }
-      }
-
+      // If the link has a hash fragment, it's the decryption key
       const secretKey = window.location.hash.substring(1);
-      if (!secretKey) {
-        throw new Error(t('errors.missing_key'));
-      }
+      if (!secretKey) throw new Error('Decryption key missing from URL');
 
-      let finalEncryptedMessage = meta.encryptedMessage;
+      const pwdHash = password ? await hashPassword(password) : undefined;
       
-      if (meta.chunkCount && meta.chunkCount > 0) {
-        const { collection, getDocs } = await import('firebase/firestore');
-        const chunksRef = collection(db, 'messages', meta.id, 'chunks');
-        const snapshot = await getDocs(chunksRef);
-        if (snapshot.size !== meta.chunkCount) {
-          throw new Error('Note is incomplete or still processing. Please try again in a few moments.');
-        }
-        const chunks = new Array(meta.chunkCount);
-        snapshot.forEach(docSnap => {
-          const idx = parseInt(docSnap.id.split('_')[1]);
-          chunks[idx] = docSnap.data().data;
+      const revealRes = await fetch(`/api/reveal-message`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, passwordHash: pwdHash })
+      });
+      const revealData = await revealRes.json();
+      
+      if (!revealRes.ok) throw new Error(revealData.error || 'Failed to reveal message');
+
+      let finalEncrypted = revealData.encryptedMessage;
+      
+      if (revealData.chunkCount > 0) {
+        const chunkRes = await fetch(`/api/messages/${id}/chunks`);
+        const chunkData = await chunkRes.json();
+        if (!chunkRes.ok) throw new Error('Failed to fetch message chunks');
+        
+        // Sort and concatenate
+        const chunks = chunkData.chunks.sort((a: any, b: any) => {
+          const idxA = parseInt(a.id.split('_')[1]);
+          const idxB = parseInt(b.id.split('_')[1]);
+          return idxA - idxB;
         });
-        finalEncryptedMessage = chunks.join('');
+        finalEncrypted = chunks.map((c: any) => c.data).join('');
       }
 
-      const decrypted = decryptMessage(finalEncryptedMessage, secretKey);
-      if (!decrypted) { 
-        throw new Error(t('errors.decrypt_failed'));
-      }
-
-      const docRef = doc(db, 'messages', meta.id);
+      // Decrypt
+      const decrypted = await decryptMessage(finalEncrypted, secretKey, revealData.iv, revealData.salt, password);
       
-      // Increment view count
-      const newViewCount = meta.viewCount + 1;
-      await updateDoc(docRef, { viewCount: newViewCount });
-
       let textToSet = decrypted;
       let fileToSet = null;
       try {
         const parsed = JSON.parse(decrypted);
         if (parsed && parsed.type === 'v2') {
           textToSet = parsed.text || '';
-          if (parsed.file) {
-             fileToSet = parsed.file;
-          }
+          if (parsed.file) fileToSet = parsed.file;
         }
       } catch (e) {
-        // v1 raw text message fallback
-        // Check if it looks like JSON but failed to parse (e.g., truncated)
-        if (decrypted.trim().startsWith('{') && decrypted.length > 10000) {
-          throw new Error('Note is corrupted or incomplete.');
-        }
+        // Raw text fallback
       }
-
-      setUnsealing(true);
-      setTimeout(() => {
-        setMessage(textToSet);
-        if (fileToSet) setFileData(fileToSet);
-        setReadAt(Date.now());
-        setUnsealing(false);
-      }, 1500); // 1.5s animation
-
+      
+      setMessage(textToSet);
+      setFileData(fileToSet);
+      setReadAt(Date.now());
+      setRevealed(true);
+      // Remove hash to prevent saving it accidentally
+      window.history.replaceState(null, '', window.location.pathname);
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || 'Decryption failed');
+    } finally {
       setDecrypting(false);
-      isSubmitting.current = false;
     }
   };
 
-  
-  const handleDownload = async () => {
-    if (!fileData || isDownloading || downloadSuccess) return;
+  const handleDownload = () => {
+    if (!fileData) return;
     setIsDownloading(true);
-    
     try {
-      // Use native fetch to convert data URI to Blob. 
-      // This is highly optimized in browsers and runs off the main thread,
-      // avoiding memory crashes and UI freezing with 500MB files.
-      const response = await fetch(fileData.data);
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = fileData.name || 'download';
-      document.body.appendChild(a);
-      a.click();
-      
-      setTimeout(() => {
-        document.body.removeChild(a);
-        window.URL.revokeObjectURL(url);
-        setIsDownloading(false);
-        setDownloadSuccess(true);
-        setTimeout(() => setDownloadSuccess(false), 2000);
-      }, 100);
-    } catch (err) {
-      console.error("Download Blob conversion failed, falling back to basic data URI", err);
-      // Fallback
       const a = document.createElement('a');
       a.href = fileData.data;
-      a.download = fileData.name || 'download';
+      a.download = fileData.name;
+      document.body.appendChild(a);
       a.click();
-      setIsDownloading(false);
+      document.body.removeChild(a);
       setDownloadSuccess(true);
-      setTimeout(() => setDownloadSuccess(false), 2000);
+      setTimeout(() => setDownloadSuccess(false), 3000);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsDownloading(false);
     }
   };
-
-  let dynamicTitle = t('view.helmet_title') || 'Secure Note - QryptNote';
-  let dynamicDesc = t('view.helmet_desc') || 'You have received a secure, self-destructing note.';
-  
-  if (error === t('errors.msg_not_found') || error === "Note not found or expired.") {
-    dynamicTitle = "Note Expired - QryptNote";
-    dynamicDesc = "This note has expired and is no longer available.";
-  } else if (error === t('errors.msg_view_limit') || error === "Note has reached its view limit.") {
-    dynamicTitle = "Note Destroyed - QryptNote";
-    dynamicDesc = "This note has reached its view limit and has been destroyed.";
-  } else if (metadata) {
-    if (metadata.viewLimit !== -1 && metadata.viewCount >= metadata.viewLimit) {
-      dynamicTitle = "Note Destroyed - QryptNote";
-      dynamicDesc = "This note has reached its view limit and has been destroyed.";
-    }
-  }
 
   const pageHelmet = (
     <Helmet>
-      <title>{dynamicTitle}</title>
-      <meta name="description" content={dynamicDesc} />
-      <meta property="og:title" content={dynamicTitle} />
-      <meta property="og:description" content={dynamicDesc} />
-      <meta property="twitter:title" content={dynamicTitle} />
-      <meta property="twitter:description" content={dynamicDesc} />
+      <title>Secure Message - QryptNote</title>
+      <meta name="description" content="View a secure, self-destructing message." />
+      <meta name="robots" content="noindex, nofollow" />
     </Helmet>
   );
 
-  if (unsealing) {
-    return (
-<PageTransition>
-      <div className="max-w-3xl mx-auto px-6 py-12 md:py-24">
-        {pageHelmet}
-        
-        <div className="mb-6 p-4 bg-violet/10 border border-violet/20 rounded-xl flex items-start gap-3 opacity-50">
-          <Info className="w-5 h-5 text-violet flex-shrink-0 mt-0.5 animate-pulse" />
-          <div className="w-full h-4 bg-violet/20 rounded animate-pulse mt-0.5" />
-        </div>
-
-        <div className="mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-2 text-text-muted text-sm font-mono font-medium animate-pulse">
-            <Lock className="w-5 h-5" />
-            DECRYPTING...
-          </div>
-        </div>
-        
-        <div className="bg-panel border border-hairline rounded-3xl shadow-2xl relative overflow-hidden h-[300px]">
-          <div className="absolute top-0 left-0 w-full h-1 bg-violet animate-pulse" />
-          
-          <div className="p-8 md:p-12 space-y-4 filter blur-sm">
-            <div className="w-full h-6 bg-ink rounded animate-pulse" />
-            <div className="w-[90%] h-6 bg-ink rounded animate-pulse" />
-            <div className="w-[95%] h-6 bg-ink rounded animate-pulse" />
-            <div className="w-[80%] h-6 bg-ink rounded animate-pulse" />
-            <div className="w-[85%] h-6 bg-ink rounded animate-pulse" />
-          </div>
-        </div>
-      </div>
-      </PageTransition>
-    );
-  }
-
   if (loading) {
     return (
-<PageTransition>
-      <div className="max-w-3xl mx-auto px-6 py-12 md:py-24">
-        {pageHelmet}
-        
-        {/* Top bar skeleton */}
-        <div className="mb-8 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-5 h-5 rounded bg-ink animate-pulse" />
-            <div className="w-48 h-5 rounded bg-ink animate-pulse" />
-          </div>
-          <div className="w-32 h-4 rounded bg-ink animate-pulse hidden sm:block" />
-        </div>
-        
-        {/* Main card skeleton */}
-        <div className="bg-panel border border-hairline rounded-3xl p-6 md:p-10 shadow-2xl relative overflow-hidden">
-          <div className="absolute top-0 left-0 w-full h-1 bg-ink animate-pulse" />
-          
-          <div className="space-y-4">
-            <div className="w-full h-6 rounded bg-ink animate-pulse" />
-            <div className="w-11/12 h-6 rounded bg-ink animate-pulse" />
-            <div className="w-4/5 h-6 rounded bg-ink animate-pulse" />
-            <div className="w-full h-6 rounded bg-ink animate-pulse" />
-            <div className="w-3/4 h-6 rounded bg-ink animate-pulse" />
-            <div className="w-5/6 h-6 rounded bg-ink animate-pulse" />
-            <div className="w-2/3 h-6 rounded bg-ink animate-pulse" />
-          </div>
-          
-          <div className="mt-12 pt-6 border-t border-hairline flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="w-48 h-4 rounded bg-ink animate-pulse" />
-            <div className="w-24 h-10 rounded bg-ink animate-pulse" />
-          </div>
-        </div>
+      <div className="flex-1 flex items-center justify-center min-h-[50vh]">
+        <Loader2 className="w-8 h-8 text-violet animate-spin" />
       </div>
+    );
+  }
+
+  if (error && !message) {
+    return (
+      <PageTransition>
+        <div className="max-w-xl mx-auto px-6 py-24 text-center">
+          {pageHelmet}
+          <div className="w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-6">
+            <EyeOff className="w-10 h-10 text-red-500" />
+          </div>
+          <h1 className="text-3xl font-display font-bold text-text-primary mb-4">
+            Message Unavailable
+          </h1>
+          <p className="text-text-muted mb-8">{error}</p>
+          <Link to="/" className="inline-flex items-center gap-2 px-6 py-3 bg-panel border border-hairline rounded-xl hover:bg-white/5 transition-colors text-text-primary font-medium">
+            Return Home <ArrowRight className="w-4 h-4" />
+          </Link>
+        </div>
       </PageTransition>
     );
   }
 
-  if (error && (!metadata || !metadata.isPasswordProtected)) {
+  // Interstitial screen
+  if (!revealed) {
     return (
-<PageTransition>
-      <div className="min-h-[60vh] flex flex-col items-center justify-center px-6">
-        {pageHelmet}
-        <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mb-6 border border-red-500/20 shadow-[0_0_15px_rgba(239,68,68,0.2)]">
-          <EyeOff className="w-8 h-8 text-red-500" />
-        </div>
-        <h1 className="text-3xl font-display font-bold mb-2 text-center text-text-primary">{t('view.err_title', 'Note Unavailable')}</h1>
-        <p className="text-text-muted max-w-md text-center mb-8 font-sans">
-          {error}
-        </p>
-        <Link to="/create" className="text-violet hover:text-violet/80 font-sans font-medium inline-flex items-center gap-2 transition-colors">
-          {t('create.create_another', 'Create your own message')} <ArrowRight className="w-4 h-4" />
-        </Link>
-      </div>
-      </PageTransition>
-    );
-  }
-
-  // If password protected and not yet decrypted
-  if (metadata?.isPasswordProtected && !message && !fileData) {
-    return (
-<PageTransition>
-      <div className="max-w-md mx-auto px-6 py-24">
-        {pageHelmet}
-        <div className="bg-panel border border-hairline rounded-3xl p-8 text-center shadow-2xl">
-          <div className="w-16 h-16 bg-violet/10 rounded-full flex items-center justify-center mx-auto mb-6 border border-violet/20 shadow-[0_0_15px_rgba(124,92,255,0.2)]">
-            <Lock className="w-8 h-8 text-violet" />
+      <PageTransition>
+        <div className="max-w-xl mx-auto px-6 py-20 text-center">
+          {pageHelmet}
+          <div className="w-24 h-24 bg-violet/10 border border-violet/20 rounded-full flex items-center justify-center mx-auto mb-6 relative">
+            <ShieldCheck className="w-12 h-12 text-violet relative z-10" />
           </div>
-          <h1 className="text-2xl font-display font-bold mb-2 text-text-primary">{t('view.enter_pass')}</h1>
-          <p className="text-text-muted mb-8 text-sm font-sans">
-            {t('view.pass_desc')}
+          <h1 className="text-3xl font-display font-bold text-text-primary mb-4">Secure Message Received</h1>
+          <p className="text-text-muted mb-8 text-lg font-sans">
+            You have received an encrypted message. Clicking reveal will fetch and decrypt the message, then permanently burn it from the server.
           </p>
-          
-          <form onSubmit={handleViewMessage} className="space-y-4 text-left">
-            {error && (
-              <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl flex items-start gap-2 text-red-400 text-sm font-sans">
-                <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                <p>{error}</p>
+
+          <form onSubmit={handleReveal} className="space-y-6 max-w-md mx-auto">
+            {metadata?.hasPassword && (
+              <div className="text-left">
+                <label className="block text-sm font-sans font-medium text-text-muted mb-2">
+                  <Lock className="w-4 h-4 inline mr-2" />
+                  Password Required
+                </label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full bg-ink border border-hairline rounded-xl px-4 py-3 text-base text-text-primary focus:outline-none focus:border-violet"
+                  required
+                />
               </div>
             )}
-            <div>
-              <input 
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder={t('view.pass_placeholder')}
-                className="w-full bg-ink border border-hairline rounded-xl px-4 py-3 text-base text-text-primary placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-violet font-sans transition-colors"
-                required
-              />
-            </div>
-            
-            <MagneticElement strength={15} className="w-full"><motion.button
-              whileTap={{ scale: 0.96 }}
-              type="submit"
-              disabled={decrypting || !password}
-              className="w-full bg-amber hover:bg-amber/90 text-ink font-sans font-medium py-4 rounded-xl flex items-center justify-center gap-2 transition-all disabled:opacity-50 shadow-[0_0_15px_rgba(124,92,255,0.2)]"
-            >
-              {decrypting ? <Loader2 className="w-5 h-5 animate-spin" /> : t('view.decrypting', 'Decrypt Message')}
-            </motion.button></MagneticElement>
+            <MagneticElement strength={15}>
+              <motion.button
+                whileTap={{ scale: 0.96 }}
+                type="submit"
+                disabled={decrypting || (metadata?.hasPassword && !password)}
+                className="w-full bg-amber hover:bg-amber/90 text-ink font-sans font-medium py-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-[0_0_15px_rgba(124,92,255,0.2)] disabled:opacity-50"
+              >
+                {decrypting ? <Loader2 className="w-5 h-5 animate-spin" /> : "Reveal Secret"}
+              </motion.button>
+            </MagneticElement>
           </form>
         </div>
-      </div>
       </PageTransition>
     );
   }
 
-  if (message || fileData) {
-    return (
-<PageTransition>
-      {/* Reading Progress Bar */}
-      <motion.div
-        className="fixed top-0 left-0 right-0 h-1 bg-gradient-to-r from-violet via-teal to-violet z-50 origin-left pointer-events-none shadow-[0_0_12px_rgba(239,35,60,0.6)]"
-        style={{ scaleX }}
-      />
+  // Decrypted View
+  return (
+    <PageTransition>
       <div className="max-w-3xl mx-auto px-6 py-12 md:py-24">
         {pageHelmet}
         
         <div className="mb-6 p-4 bg-violet/10 border border-violet/20 rounded-xl flex items-start gap-3">
           <Info className="w-5 h-5 text-violet flex-shrink-0 mt-0.5" />
           <p className="text-sm text-violet/90 font-sans leading-relaxed">
-            {t('view.security_notice')}
+            This message is now permanently destroyed on the server. <br/>
+            Hold the button below to read the message. It will erase from your screen in <b>{timeLeft}s</b>.
           </p>
         </div>
 
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
-        >
-          <div className="flex items-center gap-2 text-teal text-sm font-mono font-medium">
-            <ShieldCheck className="w-5 h-5" />
-            DECRYPTED_SUCCESSFULLY
-          </div>
-          
-        </motion.div>
-        
-        <motion.div 
-          initial={{ opacity: 0, scale: 0.98 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ delay: 0.1 }}
-          className="bg-panel border border-hairline rounded-3xl shadow-2xl relative overflow-hidden group select-none"
-          onContextMenu={(e) => e.preventDefault()}
-          onTouchStart={(e) => {
-            // Check if it's the unblur button, otherwise prevent default to avoid selection
-            if (!(e.target as HTMLElement).closest('button')) {
-              // Note: preventDefault on touchStart breaks scrolling on some devices,
-              // but we are also using CSS user-select: none which is safer.
-              // We'll keep user-select: none instead of preventDefault on touch.
-            }
-          }}
-        >
-          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-violet via-teal to-violet opacity-50 z-10"></div>
-          
+        <div className="bg-panel border border-hairline rounded-3xl shadow-2xl relative overflow-hidden group select-none">
           {/* Watermark */}
           <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden opacity-[0.05]">
             <div className="w-[150%] h-[150%] -top-1/4 -left-1/4 absolute rotate-[-30deg] flex flex-wrap content-start items-start">
@@ -512,17 +270,28 @@ export default function ViewPage() {
               ))}
             </div>
           </div>
-          
-          <div className={`p-6 md:p-10 transition-all duration-300 relative z-10 `}>
-            <div className="prose prose-invert max-w-none select-none" style={{ WebkitUserSelect: 'none', userSelect: 'none' }}>
+
+          <div className="p-6 md:p-10 relative z-10 text-center">
+            <button
+              onMouseDown={() => setHolding(true)}
+              onMouseUp={() => setHolding(false)}
+              onMouseLeave={() => setHolding(false)}
+              onTouchStart={() => setHolding(true)}
+              onTouchEnd={() => setHolding(false)}
+              className="px-6 py-3 bg-violet text-white font-medium rounded-full mb-6 cursor-pointer select-none touch-none active:scale-95 transition-transform"
+            >
+              Hold to Read
+            </button>
+            
+            <div className={`prose prose-invert max-w-none transition-all duration-200 ${holding ? 'blur-none opacity-100' : 'blur-md opacity-20'}`}>
               {message && (
-                <p className="text-lg md:text-xl text-text-primary whitespace-pre-wrap leading-relaxed font-sans select-none mb-6">
+                <p className="text-lg md:text-xl text-text-primary whitespace-pre-wrap leading-relaxed font-sans text-left">
                   <TypewriterText text={message} />
                 </p>
               )}
               {fileData && (
                 <div className="mt-4 p-4 bg-ink border border-hairline rounded-xl flex items-center justify-between">
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 text-left">
                     <div className="w-10 h-10 bg-violet/10 rounded-lg flex items-center justify-center border border-violet/20">
                       {(() => {
                         const IconComponent = getFileIcon(fileData.type, fileData.name);
@@ -533,76 +302,22 @@ export default function ViewPage() {
                       <p className="font-sans font-medium text-text-primary text-sm truncate max-w-[200px] sm:max-w-[300px]">
                         {fileData.name}
                       </p>
-                      <p className="font-sans text-xs text-text-muted">
-                        Secure File Attachment
-                      </p>
+                      <p className="font-sans text-xs text-text-muted">Secure File Attachment</p>
                     </div>
                   </div>
                   <button
                     onClick={handleDownload}
                     disabled={isDownloading || downloadSuccess}
-                    className="flex items-center gap-2 px-4 py-2 bg-violet hover:bg-violet/90 text-white rounded-lg font-sans text-sm transition-colors shadow-[0_0_10px_rgba(124,92,255,0.2)] disabled:opacity-70 disabled:cursor-not-allowed min-w-[120px] justify-center overflow-hidden relative"
+                    className="flex items-center gap-2 px-4 py-2 bg-violet hover:bg-violet/90 text-white rounded-lg font-sans text-sm transition-colors shadow-[0_0_10px_rgba(124,92,255,0.2)] disabled:opacity-70 justify-center"
                   >
-                    {isDownloading ? (
-                      <motion.div
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="flex items-center gap-2"
-                      >
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        {t('view.downloading', 'Downloading...')}
-                      </motion.div>
-                    ) : downloadSuccess ? (
-                      <motion.div
-                        initial={{ opacity: 0, scale: 0.8 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        className="flex items-center gap-2 text-white"
-                      >
-                        <Check className="w-4 h-4" />
-                        {t('view.downloaded', 'Downloaded')}
-                      </motion.div>
-                    ) : (
-                      <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        className="flex items-center gap-2"
-                      >
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-                        {t('view.download', 'Download')}
-                      </motion.div>
-                    )}
+                    {isDownloading ? <Loader2 className="w-4 h-4 animate-spin" /> : (downloadSuccess ? <Check className="w-4 h-4" /> : "Download")}
                   </button>
                 </div>
               )}
             </div>
           </div>
-
-          
-          
-          <div className="pt-6 border-t border-hairline flex flex-col sm:flex-row items-center justify-between gap-4 p-6 md:px-10 md:pb-10 relative z-10 bg-panel/80">
-            <p className="text-xs text-text-muted font-mono tracking-wide">
-              {metadata?.viewLimit === 1 ? 'STATUS: DESTROYED_FROM_SERVER' : 'STATUS: FETCHED_SECURELY'}
-            </p>
-          </div>
-        </motion.div>
-        
-        <motion.div 
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.5 }}
-          className="mt-16 text-center"
-        >
-          <Link to="/create" className="inline-flex flex-col items-center gap-2 text-text-muted hover:text-text-primary transition-colors">
-            <span className="text-sm font-sans">Powered by QryptNote</span>
-            <span className="flex items-center gap-2 font-sans font-medium text-violet">
-              {t('create.create_another', 'Create your own secure note')} <ArrowRight className="w-4 h-4" />
-            </span>
-          </Link>
-        </motion.div>
+        </div>
       </div>
-      </PageTransition>
-    );
-  }
-
-  return null;
+    </PageTransition>
+  );
 }

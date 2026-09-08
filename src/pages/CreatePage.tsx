@@ -40,6 +40,7 @@ export default function CreatePage() {
   const [qrDataUrl, setQrDataUrl] = useState("");
   const [copied, setCopied] = useState(false);
   const [createdMessageId, setCreatedMessageId] = useState<string | null>(null);
+  const [destructionToken, setDestructionToken] = useState<string | null>(null);
   const [messageStatus, setMessageStatus] = useState<{
     status: "active" | "destroyed";
     viewCount: number;
@@ -131,41 +132,33 @@ export default function CreatePage() {
         payload = JSON.stringify({ type: 'v2', text: message, file });
       }
       
-      const { encryptedMessage, secretKey } = encryptMessage(payload);
+      const { encryptedMessage, secretKey, iv, salt } = await encryptMessage(payload, password);
 
       const CHUNK_SIZE = 800000; // Safe size for Vercel/Firestore
-      const clientChunks: string[] = [];
-      let finalEncryptedMessage = encryptedMessage;
-      let finalChunkCount = 0;
+      const clientChunks = encryptedMessage.length > CHUNK_SIZE
+        ? Array.from({ length: Math.ceil(encryptedMessage.length / CHUNK_SIZE) }, (_, i) => encryptedMessage.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE))
+        : [];
 
-      if (encryptedMessage.length > CHUNK_SIZE) {
-        for (let i = 0; i < encryptedMessage.length; i += CHUNK_SIZE) {
-          clientChunks.push(encryptedMessage.substring(i, i + CHUNK_SIZE));
-        }
-        finalEncryptedMessage = "";
-        finalChunkCount = clientChunks.length;
-      }
-
-      const expiryTimestamp = expiry 
-        ? Date.now() + (expiry * 60 * 60 * 1000)
-        : null;
-
+      const expiryTimestamp = expiry ? Date.now() + (expiry * 60 * 60 * 1000) : null;
+      const pwdHash = password ? await hashPassword(password) : null;
+      
       const messageDoc: any = {
         id,
-        encryptedMessage: finalEncryptedMessage,
-        chunkCount: finalChunkCount,
+        encryptedMessage: clientChunks.length > 0 ? "" : encryptedMessage,
+        iv,
+        salt,
+        chunkCount: clientChunks.length,
         expiryTimestamp,
         viewLimit: viewLimit || 1,
         viewCount: 0,
-        passwordHash: password ? hashPassword(password) : null,
-        createdAt: Date.now()
+        passwordHash: pwdHash,
+        createdAt: Date.now(),
+        ...(razorpayOrderId && razorpayPaymentId ? {
+          paidFeatureUnlock: true,
+          razorpayOrderId,
+          razorpayPaymentId
+        } : {})
       };
-
-      if (razorpayOrderId && razorpayPaymentId) {
-        messageDoc.paidFeatureUnlock = true;
-        messageDoc.razorpayOrderId = razorpayOrderId;
-        messageDoc.razorpayPaymentId = razorpayPaymentId;
-      }
 
       const userEmail = localStorage.getItem("qryptnote_user_email") || "";
       const res = await fetch('/api/create-message', {
@@ -190,27 +183,19 @@ export default function CreatePage() {
         }
         throw new Error(errorData.error || t('errors.network_timeout'));
       }
+      const resData = await res.json();
+      const token = resData.destructionToken;
+      setDestructionToken(token);
 
-      // If we chunked the file on the client, upload chunks to the server
-      if (clientChunks.length > 0) {
-        // Upload sequentially or in small parallel batches to avoid overwhelming the server
-        for (let i = 0; i < clientChunks.length; i++) {
-          const formData = new FormData();
-          formData.append('id', id);
-          formData.append('chunkIndex', i.toString());
-          // Create a Blob from the chunk string and append as file
-          const blob = new Blob([clientChunks[i]], { type: 'text/plain' });
-          formData.append('chunk', blob, `chunk_${i}.txt`);
+      // Upload sequentially to avoid overwhelming the server
+      for (const [i, chunk] of clientChunks.entries()) {
+        const formData = new FormData();
+        formData.append('id', id);
+        formData.append('chunkIndex', i.toString());
+        formData.append('chunk', new Blob([chunk], { type: 'text/plain' }), `chunk_${i}.txt`);
 
-          const chunkRes = await fetch('/api/upload-chunk', {
-            method: 'POST',
-            body: formData,
-          });
-
-          if (!chunkRes.ok) {
-            throw new Error(`Failed to upload file chunk ${i + 1} of ${clientChunks.length}`);
-          }
-        }
+        const chunkRes = await fetch('/api/upload-chunk', { method: 'POST', body: formData });
+        if (!chunkRes.ok) throw new Error(`Failed to upload file chunk ${i + 1} of ${clientChunks.length}`);
       }
 
       // Generate URL and QR
@@ -227,6 +212,12 @@ export default function CreatePage() {
       setQrDataUrl(qrCode);
       setResultUrl(viewUrl);
       setCreatedMessageId(id);
+      
+      // Store destruction token in localStorage for easy management later
+      const sentNotes = JSON.parse(localStorage.getItem('sent_notes') || '[]');
+      sentNotes.push({ id, destructionToken: token, createdAt: Date.now() });
+      localStorage.setItem('sent_notes', JSON.stringify(sentNotes));
+      
       setMessageStatus({ status: "active", viewCount: 0 });
     } catch (err: any) {
       setError(err.message || "Failed to create message");
@@ -441,6 +432,22 @@ export default function CreatePage() {
       </PageTransition>
     );
   }
+
+  const handleRevoke = async () => {
+    if (!createdMessageId || !destructionToken) return;
+    try {
+      const res = await fetch('/api/delete-message', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: createdMessageId, destructionToken })
+      });
+      if (res.ok) {
+        setMessageStatus({ status: 'destroyed', viewCount: 0 });
+      }
+    } catch (e) {
+      console.error('Failed to revoke message', e);
+    }
+  };
 
   return (
     <PageTransition>
