@@ -133,13 +133,27 @@ export default function CreatePage() {
       
       const { encryptedMessage, secretKey } = encryptMessage(payload);
 
+      const CHUNK_SIZE = 800000; // Safe size for Vercel/Firestore
+      const clientChunks: string[] = [];
+      let finalEncryptedMessage = encryptedMessage;
+      let finalChunkCount = 0;
+
+      if (encryptedMessage.length > CHUNK_SIZE) {
+        for (let i = 0; i < encryptedMessage.length; i += CHUNK_SIZE) {
+          clientChunks.push(encryptedMessage.substring(i, i + CHUNK_SIZE));
+        }
+        finalEncryptedMessage = "";
+        finalChunkCount = clientChunks.length;
+      }
+
       const expiryTimestamp = expiry 
         ? Date.now() + (expiry * 60 * 60 * 1000)
         : null;
 
       const messageDoc: any = {
         id,
-        encryptedMessage,
+        encryptedMessage: finalEncryptedMessage,
+        chunkCount: finalChunkCount,
         expiryTimestamp,
         viewLimit: viewLimit || 1,
         viewCount: 0,
@@ -165,6 +179,7 @@ export default function CreatePage() {
           razorpayPaymentId
         })
       });
+
       if (!res.ok) {
         const text = await res.text();
         let errorData;
@@ -174,6 +189,20 @@ export default function CreatePage() {
           errorData = { error: text || res.statusText };
         }
         throw new Error(errorData.error || t('errors.network_timeout'));
+      }
+
+      // If we chunked the file on the client, write chunks directly to Firestore
+      if (clientChunks.length > 0) {
+        const batchSize = 10;
+        for (let i = 0; i < clientChunks.length; i += batchSize) {
+          const batch = writeBatch(db);
+          const currentChunks = clientChunks.slice(i, i + batchSize);
+          currentChunks.forEach((chunkData, index) => {
+            const chunkRef = doc(db, `messages/${id}/chunks/chunk_${i + index}`);
+            batch.set(chunkRef, { data: chunkData });
+          });
+          await batch.commit();
+        }
       }
 
       // Generate URL and QR
@@ -505,10 +534,11 @@ export default function CreatePage() {
             />
           </div>
 
+        <div className="flex flex-col gap-2">
           <div className="flex items-center gap-4">
             <label className="cursor-pointer flex items-center gap-2 px-4 py-2 bg-ink border border-hairline rounded-lg text-text-primary hover:bg-panel transition-colors font-sans text-sm">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-violet"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
-              {file ? t('create.change_file', 'Change File') : t('create.attach_file', 'Attach File (Max 10MB/500MB)')}
+              {file ? t('create.change_file', 'Change File') : t('create.attach_file', 'Attach File')}
               <input type="file" className="hidden" onChange={handleFileChange} />
             </label>
             {file && (
@@ -520,6 +550,10 @@ export default function CreatePage() {
               </div>
             )}
           </div>
+          <p className="text-xs text-text-muted font-sans pl-1">
+            {t('create.file_info', 'You can attach any file type. Videos can be up to 500MB, and all other files up to 10MB.')}
+          </p>
+        </div>
 
           <div className="bg-panel border border-hairline rounded-2xl p-6 shadow-lg">
             <div className="flex items-center justify-between mb-6">

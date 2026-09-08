@@ -557,8 +557,8 @@ export async function createApp() {
       console.log("ENCRYPTION_KEY present:", !!process.env.ENCRYPTION_KEY);
       console.log("FIREBASE_SERVICE_ACCOUNT_JSON present:", !!process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
 
-      const { id, encryptedMessage, expiryTimestamp, viewLimit, passwordHash, userId } = req.body;
-      if (!id || !encryptedMessage) {
+      const { id, encryptedMessage, expiryTimestamp, viewLimit, passwordHash, userId, chunkCount: clientChunkCount } = req.body;
+      if (!id || (encryptedMessage === undefined && clientChunkCount === undefined)) {
         return res.status(400).json({ error: 'Missing id or encryptedMessage' });
       }
       let isPro = false;
@@ -604,10 +604,12 @@ export async function createApp() {
         }
       }
 
+      const finalChunkCount = clientChunkCount !== undefined ? clientChunkCount : chunks.length;
+      
       const messageDoc: any = {
         id,
-        encryptedMessage: chunks.length > 0 ? '' : encryptedMessage,
-        chunkCount: chunks.length,
+        encryptedMessage: (chunks.length > 0 || finalChunkCount > 0) ? '' : (encryptedMessage || ''),
+        chunkCount: finalChunkCount,
         expiryTimestamp: finalExpiry,
         viewLimit: finalViewLimit,
         viewCount: 0,
