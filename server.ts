@@ -384,6 +384,18 @@ app.use((req, res, next) => {
   
   
   
+  
+  app.get('/api/debug-env', (req, res) => {
+    res.json({
+      hasRazorpayId: !!process.env.RAZORPAY_KEY_ID,
+      hasRazorpaySecret: !!process.env.RAZORPAY_KEY_SECRET,
+      hasPlanId: !!process.env.RAZORPAY_PRO_PLAN_ID,
+      hasFirebaseJson: !!process.env.FIREBASE_SERVICE_ACCOUNT_JSON,
+      firebaseJsonLength: process.env.FIREBASE_SERVICE_ACCOUNT_JSON ? process.env.FIREBASE_SERVICE_ACCOUNT_JSON.length : 0,
+      firebaseInit: !!getAdminFirestoreInstance(),
+    });
+  });
+
   app.post('/api/create-subscription', async (req, res) => {
     try {
       const adminFirestore = getAdminFirestoreInstance();
@@ -424,7 +436,8 @@ app.use((req, res, next) => {
       res.json({ subscriptionId: subscription.id });
     } catch (error: any) {
       console.error('Create sub error:', error);
-      res.status(500).json({ error: error.message || 'Failed to create subscription' });
+      const errorMessage = error?.error?.description || error?.message || 'Failed to create subscription';
+      res.status(500).json({ error: errorMessage });
     }
   });
 

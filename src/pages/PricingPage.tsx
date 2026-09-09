@@ -222,8 +222,11 @@ export default function PricingPage() {
             <input type="email" ref={emailInputRef} id="email-input" 
               placeholder="Enter your email" 
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full bg-ink border border-hairline rounded-xl px-4 py-3 text-sm text-text-primary placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-violet"
+              onChange={(e) => {
+                setEmail(e.target.value);
+                if (errorMsg === "Please enter a valid email to upgrade.") setErrorMsg("");
+              }}
+              className={`w-full bg-ink border rounded-xl px-4 py-3 text-sm text-text-primary placeholder-text-muted focus:outline-none focus:ring-1 transition-colors ${errorMsg === "Please enter a valid email to upgrade." ? "border-red-500 ring-1 ring-red-500" : "border-hairline focus:ring-violet"}`}
               disabled={isPro}
             />
           </div>
