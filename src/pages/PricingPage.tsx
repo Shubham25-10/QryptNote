@@ -1,3 +1,4 @@
+import React from 'react';
 import { PageTransition } from "../components/PageTransition";
 import { TiltCard } from '../components/TiltCard';
 import { Link } from "react-router";
@@ -16,6 +17,7 @@ export default function PricingPage() {
   
   const { t } = useTranslation();
   const { userEmail, isPro, loading } = useUser();
+  const emailInputRef = React.useRef<HTMLInputElement>(null);
   const [email, setEmail] = useState(localStorage.getItem("qryptnote_user_email") || "");
   const isRazorpayLoaded = useRazorpay();
   const [isProcessing, setIsProcessing] = useState(false);
@@ -32,6 +34,7 @@ export default function PricingPage() {
   const handleUpgrade = async () => {
     if (!email || !/^\S+@\S+\.\S+$/.test(email)) {
       setErrorMsg("Please enter a valid email to upgrade.");
+      emailInputRef.current?.focus();
       return;
     }
     localStorage.setItem('qryptnote_user_email', email);
@@ -216,8 +219,7 @@ export default function PricingPage() {
 
           
           <div className="mb-4">
-            <input 
-              type="email" 
+            <input type="email" ref={emailInputRef} id="email-input" 
               placeholder="Enter your email" 
               value={email}
               onChange={(e) => setEmail(e.target.value)}
