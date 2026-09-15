@@ -5,6 +5,7 @@ import { Shield, AlertCircle, Copy, QrCode, Trash2, CheckCircle, Ghost, Lock, Cl
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import QRCode from 'qrcode';
+import { ErrorBoundary } from '../components/ErrorBoundary';
 
 interface LocalNote {
   id: string;
@@ -25,6 +26,7 @@ interface NoteStatus {
 }
 
 export default function DashboardPage() {
+  const [isMounted, setIsMounted] = useState(false);
   const [notes, setNotes] = useState<NoteStatus[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -32,6 +34,7 @@ export default function DashboardPage() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   useEffect(() => {
+    setIsMounted(true);
     const fetchLocalNotes = async () => {
       try {
         setLoading(true);
@@ -88,12 +91,25 @@ export default function DashboardPage() {
             }
           } catch (e) {
             console.error(`Error fetching note ${local.id}`, e);
+            // Graceful fallback for missing Firebase config or failed network requests
+            noteStatuses.push({
+              id: local.id,
+              destructionToken: local.destructionToken,
+              createdAt: local.createdAt || Date.now(),
+              expiryTimestamp: 0,
+              viewCount: 0,
+              viewLimit: 1,
+              isEncrypted: true,
+              hasPassword: false,
+              status: 'active'
+            });
           }
         }));
         
         noteStatuses.sort((a, b) => b.createdAt - a.createdAt);
         setNotes(noteStatuses);
       } catch (err: any) {
+        console.error('Failed to read from localStorage:', err);
         setError(err.message || "Failed to load dashboard data");
       } finally {
         setLoading(false);
@@ -102,6 +118,14 @@ export default function DashboardPage() {
     
     fetchLocalNotes();
   }, []);
+
+  if (!isMounted) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center min-h-[60vh] w-full px-6 text-center text-text-muted">
+        Loading dashboard...
+      </div>
+    );
+  }
 
   const copyLink = (id: string) => {
     const url = `${window.location.origin}/msg/${id}`;
@@ -332,50 +356,52 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="w-full flex-1 flex flex-col">
-      {content}
-      
-      {/* QR Code Modal */}
-      <AnimatePresence>
-        {qrModal && (
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-ink/80 backdrop-blur-sm"
-            onClick={() => setQrModal(null)}
-          >
+    <ErrorBoundary>
+      <div className="w-full flex-1 flex flex-col">
+        {content}
+        
+        {/* QR Code Modal */}
+        <AnimatePresence>
+          {qrModal && (
             <motion.div 
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              onClick={(e) => e.stopPropagation()}
-              className="bg-panel border border-hairline p-8 rounded-3xl max-w-sm w-full shadow-2xl relative"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-ink/80 backdrop-blur-sm"
+              onClick={() => setQrModal(null)}
             >
-              <button 
-                onClick={() => setQrModal(null)}
-                className="absolute top-4 right-4 text-text-muted hover:text-white transition-colors"
+              <motion.div 
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.95, opacity: 0 }}
+                onClick={(e) => e.stopPropagation()}
+                className="bg-panel border border-hairline p-8 rounded-3xl max-w-sm w-full shadow-2xl relative"
               >
-                <X className="w-5 h-5" />
-              </button>
-              <h3 className="text-xl font-bold text-text-primary mb-6 text-center">Share Secret</h3>
-              <div className="bg-white p-4 rounded-xl flex items-center justify-center mb-6">
-                <img src={qrModal.url} alt="QR Code" className="w-full max-w-[200px]" />
-              </div>
-              <p className="text-center text-sm text-text-muted mb-4 font-mono">
-                {qrModal.id.substring(0, 12)}...
-              </p>
-              <button 
-                onClick={() => { copyLink(qrModal.id); setQrModal(null); }}
-                className="w-full py-3 bg-violet/10 text-violet hover:bg-violet/20 font-medium rounded-xl transition-colors flex items-center justify-center gap-2"
-              >
-                <Copy className="w-4 h-4" />
-                Copy Link
-              </button>
+                <button 
+                  onClick={() => setQrModal(null)}
+                  className="absolute top-4 right-4 text-text-muted hover:text-white transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+                <h3 className="text-xl font-bold text-text-primary mb-6 text-center">Share Secret</h3>
+                <div className="bg-white p-4 rounded-xl flex items-center justify-center mb-6">
+                  <img src={qrModal.url} alt="QR Code" className="w-full max-w-[200px]" />
+                </div>
+                <p className="text-center text-sm text-text-muted mb-4 font-mono">
+                  {qrModal.id.substring(0, 12)}...
+                </p>
+                <button 
+                  onClick={() => { copyLink(qrModal.id); setQrModal(null); }}
+                  className="w-full py-3 bg-violet/10 text-violet hover:bg-violet/20 font-medium rounded-xl transition-colors flex items-center justify-center gap-2"
+                >
+                  <Copy className="w-4 h-4" />
+                  Copy Link
+                </button>
+              </motion.div>
             </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
+          )}
+        </AnimatePresence>
+      </div>
+    </ErrorBoundary>
   );
 }
