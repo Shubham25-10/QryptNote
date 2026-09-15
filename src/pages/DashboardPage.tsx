@@ -199,21 +199,41 @@ export default function DashboardPage() {
     );
   } else if (notes.length === 0) {
     content = (
-      <div className="w-full flex-1 flex flex-col items-center justify-center min-h-[60vh] px-4 animate-in fade-in zoom-in-95 duration-500">
-        <div className="w-24 h-24 bg-violet/10 rounded-full flex items-center justify-center mb-6 shadow-[0_0_40px_rgba(124,92,255,0.15)]">
-          <Lock className="w-12 h-12 text-violet" />
-        </div>
-        <h2 className="text-3xl font-display font-bold text-text-primary mb-4">No Active Secrets</h2>
-        <p className="text-text-muted max-w-md text-center mb-8 text-lg leading-relaxed">
-          You haven't created any self-destructing notes yet, or your previous notes have already vanished.
-        </p>
-        <Link 
-          to="/create"
-          className="bg-violet hover:bg-violet/90 text-white font-medium px-8 py-3.5 rounded-xl transition-all shadow-[0_0_20px_rgba(124,92,255,0.3)] hover:shadow-[0_0_30px_rgba(124,92,255,0.5)] flex items-center gap-2"
+      <div className="w-full flex-1 flex flex-col items-center justify-center min-h-[70vh] px-4">
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.9, y: 20 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          transition={{ duration: 0.5, ease: "easeOut" }}
+          className="flex flex-col items-center max-w-lg mx-auto text-center relative"
         >
-          <Shield className="w-5 h-5" />
-          Create a Secret Note
-        </Link>
+          {/* Background subtle glow */}
+          <div className="absolute inset-0 bg-violet/10 blur-[120px] rounded-full w-full h-full -z-10" />
+          
+          <motion.div 
+            animate={{ y: [0, -12, 0] }}
+            transition={{ repeat: Infinity, duration: 4, ease: "easeInOut" }}
+            className="relative w-32 h-32 mb-8 flex items-center justify-center"
+          >
+            <div className="absolute inset-0 bg-violet/10 rounded-[2rem] rotate-6 scale-105 border border-violet/20" />
+            <div className="absolute inset-0 bg-panel border border-hairline rounded-[2rem] -rotate-3 shadow-2xl" />
+            <Ghost className="w-14 h-14 text-violet relative z-10 drop-shadow-[0_0_15px_rgba(239,35,60,0.5)]" />
+          </motion.div>
+          
+          <h2 className="text-3xl md:text-4xl font-display font-bold text-text-primary mb-4 tracking-tight">
+            No Active Secrets
+          </h2>
+          <p className="text-text-muted mb-10 text-lg leading-relaxed max-w-md mx-auto">
+            You haven't created any self-destructing notes yet, or your previous notes have already vanished into the ether.
+          </p>
+          
+          <Link 
+            to="/create"
+            className="group relative inline-flex items-center gap-3 bg-violet text-white font-medium px-8 py-4 rounded-xl transition-all hover:scale-105 shadow-[0_0_20px_rgba(239,35,60,0.3)] hover:shadow-[0_0_40px_rgba(239,35,60,0.5)]"
+          >
+            <Shield className="w-5 h-5 group-hover:rotate-12 transition-transform duration-300" />
+            <span>Create a Secret Note</span>
+          </Link>
+        </motion.div>
       </div>
     );
   } else {

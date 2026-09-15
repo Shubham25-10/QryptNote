@@ -126,12 +126,12 @@ export default function PricingPage() {
         <meta property="og:title" content={t("pricing.helmet_title")} />
         <meta property="og:description" content={t("pricing.helmet_desc")} />
       </Helmet>
-      <div className="text-center mb-20">
-        <h1 className="text-[36px] sm:text-[48px] md:text-[64px] font-display font-bold mb-4 tracking-tight text-text-primary px-2">
-          {t("pricing.headline")}
+      <div className="text-center mb-20 relative z-10">
+        <h1 className="text-[36px] sm:text-[48px] md:text-[64px] font-display font-bold mb-4 tracking-tight text-white px-2">
+          Simple, Transparent Pricing
         </h1>
         <p className="text-lg sm:text-xl text-text-muted font-sans px-4">
-          {t("pricing.subheadline")}
+          Choose the level of security that fits your needs.
         </p>
       </div>
 
