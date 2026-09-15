@@ -10,7 +10,7 @@ import {
   Lock,
   Download,
   Copy,
-  CheckCircle2,
+  CheckCircle,
   Loader2,
   AlertCircle,
   Eye,
@@ -25,7 +25,7 @@ import { db } from "../firebase";
 import { collection, addDoc, doc, setDoc, getDoc, writeBatch } from "firebase/firestore";
 import { nanoid } from "nanoid";
 import { encryptMessage, hashPassword } from "../lib/crypto";
-import { useRazorpay } from '../hooks/useRazorpay';
+import { loadRazorpay } from '../hooks/useRazorpay';
 import { useCurrency } from '../hooks/useCurrency';
 import { Link } from 'react-router';
 
@@ -54,7 +54,6 @@ export default function CreatePage() {
 
   const [showPayPrompt, setShowPayPrompt] = useState(false);
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
-  const isRazorpayLoaded = useRazorpay();
   const { formatPrice, loading: currencyLoading } = useCurrency();
   const paygoPrice = formatPrice(1);
   const proPrice = formatPrice(3);
@@ -228,11 +227,14 @@ export default function CreatePage() {
   };
 
   const handlePayPerMessage = async () => {
+    setIsProcessingPayment(true);
+    const isRazorpayLoaded = await loadRazorpay();
     if (!isRazorpayLoaded) {
-      setError("Payment gateway loading, please try again.");
+      setError("Payment gateway loading failed, please try again.");
+      setIsProcessingPayment(false);
       return;
     }
-    setIsProcessingPayment(true);
+    
     try {
       const orderRes = await fetch('/api/create-order', { method: 'POST' });
       if (!orderRes.ok) throw new Error("Failed to create order");
@@ -253,11 +255,13 @@ export default function CreatePage() {
               body: JSON.stringify({
                 razorpay_order_id: response.razorpay_order_id,
                 razorpay_payment_id: response.razorpay_payment_id,
-                razorpay_signature: response.razorpay_signature
+                razorpay_signature: response.razorpay_signature,
+                email: localStorage.getItem("qryptnote_user_email") || ""
               })
             });
             const verifyData = await verifyRes.json();
             if (verifyData.success) {
+              window.dispatchEvent(new Event('qryptnote-user-updated'));
               setShowPayPrompt(false);
               await submitMessage(response.razorpay_order_id, response.razorpay_payment_id);
             } else {
@@ -388,7 +392,7 @@ export default function CreatePage() {
                     className="flex items-center gap-1.5 px-3 py-3 bg-panel hover:bg-panel/80 text-text-primary transition-colors text-sm font-medium border-l border-hairline whitespace-nowrap"
                   >
                     {copied ? (
-                      <CheckCircle2 className="w-4 h-4 text-teal" />
+                      <CheckCircle className="w-4 h-4 text-teal" />
                     ) : (
                       <Copy className="w-4 h-4" />
                     )}

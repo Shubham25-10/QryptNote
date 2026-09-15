@@ -52,7 +52,13 @@ if (typeof window !== 'undefined') {
 
   const originalConsoleError = console.error;
   console.error = function (...args) {
-    pushLog('error', args);
+    const errorString = args.map(a => a instanceof Error ? a.message : String(a)).join(' ');
+    if (errorString.includes('[vite] failed to connect to websocket')) {
+      originalConsoleError.apply(console, args);
+      return;
+    }
+    pushLog('error', args); 
+    fetch("/api/client-logs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ error: args.map(a => a instanceof Error ? a.message + " " + a.stack : typeof a === "object" ? JSON.stringify(a) : String(a)) }) }).catch(() => {});
     originalConsoleError.apply(console, args);
   };
 

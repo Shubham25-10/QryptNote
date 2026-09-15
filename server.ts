@@ -146,6 +146,9 @@ function getRazorpayInstance() {
 
 export async function createApp() {
   const app = express();
+
+  app.post("/api/client-logs", express.json(), (req, res) => { console.log("--- CLIENT ERROR ---"); fs.appendFileSync("client_errors.log", JSON.stringify(req.body, null, 2) + "\n"); res.json({ ok: true }); });
+
 app.use((req, res, next) => {
   res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://checkout.razorpay.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' wss: ws: https://firestore.googleapis.com https://securetoken.googleapis.com https://identitytoolkit.googleapis.com https://checkout.razorpay.com; font-src 'self' data:; frame-src 'self' https://api.razorpay.com;");
   res.setHeader('X-Frame-Options', 'DENY');
@@ -484,6 +487,20 @@ app.use((req, res, next) => {
               },
               updatedAt: Date.now()
             }, { merge: true });
+            
+            // Save payment history record
+            if (event.payload?.payment?.entity) {
+              const paymentInfo = event.payload.payment.entity;
+              await userRef.collection('payments').doc(paymentInfo.id).set({
+                id: paymentInfo.id,
+                orderId: paymentInfo.order_id,
+                amount: 3, // $3 for Pro
+                currency: 'USD',
+                status: 'completed',
+                type: 'subscription',
+                createdAt: Date.now()
+              });
+            }
             break;
             
           case 'subscription.cancelled':
@@ -850,6 +867,7 @@ app.use((req, res, next) => {
 
       const messageDoc: any = {
         id,
+        createdBy: userId || null,
         encryptedMessage: (chunks.length > 0 || finalChunkCount > 0) ? '' : (encryptedMessage || ''),
         iv,
         salt: salt || null,
@@ -911,7 +929,7 @@ app.use((req, res, next) => {
 
   app.post('/api/verify-payment', async (req, res) => {
     try {
-      const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+      const { razorpay_order_id, razorpay_payment_id, razorpay_signature, email } = req.body;
       const secret = process.env.RAZORPAY_KEY_SECRET;
       if (!secret) throw new Error("Razorpay secret not configured");
 
@@ -921,6 +939,23 @@ app.use((req, res, next) => {
         .digest("hex");
 
       if (expectedSignature === razorpay_signature) {
+        
+        // Save to payment history if email is provided
+        if (email) {
+          const adminFirestore = getAdminFirestoreInstance();
+          if (adminFirestore) {
+            await adminFirestore.collection('users').doc(email).collection('payments').doc(razorpay_payment_id).set({
+              id: razorpay_payment_id,
+              orderId: razorpay_order_id,
+              amount: 1, // $1 for PAYG
+              currency: 'USD',
+              status: 'completed',
+              type: 'pay-as-you-go',
+              createdAt: Date.now()
+            });
+          }
+        }
+        
         res.json({ success: true });
       } else {
         res.status(400).json({ error: "Invalid signature" });
@@ -930,6 +965,69 @@ app.use((req, res, next) => {
       res.status(500).json({ error: error.message });
     }
   });
+  app.get('/api/users/:userId/notes', async (req, res) => {
+    try {
+      const adminFirestore = getAdminFirestoreInstance();
+      if (!adminFirestore) {
+        // Fallback for lite mode - though lite doesn't easily support index queries without setup, we will try
+        const { getDocs, query, collection: col, where, orderBy } = await import('firebase/firestore/lite');
+        const q = query(
+          col(firestore, 'messages'),
+          where('createdBy', '==', req.params.userId),
+          orderBy('createdAt', 'desc')
+        );
+        const notesSnap = await getDocs(q);
+        const notes = notesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        return res.json({ notes });
+      }
+
+      const { userId } = req.params;
+      const notesSnap = await adminFirestore
+        .collection('messages')
+        .where('createdBy', '==', userId)
+        .orderBy('createdAt', 'desc')
+        .get();
+        
+      const notes = notesSnap.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: data.id || doc.id,
+          createdAt: data.createdAt,
+          expiryTimestamp: data.expiryTimestamp,
+          viewCount: data.viewCount,
+          viewLimit: data.viewLimit,
+          isEncrypted: !!data.encryptedMessage, // just a flag
+          hasPassword: !!data.passwordHash,
+        };
+      });
+
+      res.json({ notes });
+    } catch (error: any) {
+      console.error(error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get('/api/users/:userId/payments', async (req, res) => {
+    try {
+      const adminFirestore = getAdminFirestoreInstance();
+      if (!adminFirestore) throw new Error("Admin Database not initialized");
+      const { userId } = req.params;
+      const paymentsSnap = await adminFirestore
+        .collection('users')
+        .doc(userId)
+        .collection('payments')
+        .orderBy('createdAt', 'desc')
+        .get();
+        
+      const payments = paymentsSnap.docs.map(doc => doc.data());
+      res.json({ payments });
+    } catch (error: any) {
+      console.error(error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production" && process.env.NODE_ENV !== "test" && !process.env.VERCEL && !process.env.VERCEL_ENV) {
     const viteModule = 'vite';

@@ -42,8 +42,7 @@ export function useCurrency() {
         setCurrency(detectedCurrency);
         sessionStorage.setItem('user_currency', detectedCurrency);
       } catch (error) {
-        console.error('Error fetching location for currency:', error);
-        // Fallback to USD
+        // Silently fallback to USD if location fetch fails (e.g. adblocker, rate limit)
         setCurrency('USD');
       } finally {
         setLoading(false);

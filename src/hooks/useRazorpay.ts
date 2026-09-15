@@ -1,26 +1,18 @@
-import { useState, useEffect } from 'react';
-
 declare global { interface Window { Razorpay: any; } }
 
-export function useRazorpay() {
-  const [isLoaded, setIsLoaded] = useState(false);
-
-  useEffect(() => {
+export function loadRazorpay(): Promise<boolean> {
+  return new Promise((resolve) => {
     if (window.Razorpay) {
-      setIsLoaded(true);
+      resolve(true);
       return;
     }
-
     const script = document.createElement('script');
     script.src = 'https://checkout.razorpay.com/v1/checkout.js';
-    script.onload = () => setIsLoaded(true);
-    script.onerror = () => console.error('Razorpay SDK failed to load');
-    document.body.appendChild(script);
-
-    return () => {
-      // document.body.removeChild(script);
+    script.onload = () => resolve(true);
+    script.onerror = () => {
+      console.error('Razorpay SDK failed to load');
+      resolve(false);
     };
-  }, []);
-
-  return isLoaded;
+    document.body.appendChild(script);
+  });
 }

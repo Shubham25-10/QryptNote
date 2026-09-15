@@ -16,7 +16,6 @@ console.warn = (...args) => {
   originalWarn(...args);
 };
 
-
 // Auto-log uncaught errors
 if (typeof window !== 'undefined') {
   const submitError = async (errorMsg, stack) => {

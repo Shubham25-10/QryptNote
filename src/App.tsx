@@ -12,7 +12,6 @@ import { Routes, Route, Link, useLocation } from "react-router";
 import { Shield, Menu, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Helmet } from "react-helmet-async";
-import { AnimatePresence } from "motion/react";
 
 import LandingPage from "./pages/LandingPage";
 import CreatePage from "./pages/CreatePage";
@@ -21,13 +20,18 @@ import PricingPage from "./pages/PricingPage";
 import PrivacyPolicyPage from "./pages/PrivacyPolicyPage";
 import TermsOfServicePage from "./pages/TermsOfServicePage";
 import NotFoundPage from "./pages/NotFoundPage";
+import DashboardPage from "./pages/DashboardPage";
 import BugReporter from "./components/BugReporter";
+import { useUser } from "./hooks/useUser";
+
+import { ErrorBoundary } from "./components/ErrorBoundary";
 
 export default function App() {
   const { t, i18n } = useTranslation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const spotlightRef = useRef<HTMLDivElement>(null);
-  
+  const { userEmail } = useUser();
+
   useEffect(() => {
     const root = document.documentElement;
     const hour = new Date().getHours();
@@ -188,6 +192,12 @@ export default function App() {
               </button>
             </div>
             <MagneticElement strength={20}><Link
+              to="/dashboard"
+              className="text-text-muted hover:text-text-primary transition-colors min-h-[44px] flex items-center justify-center px-2"
+            >
+              Dashboard
+            </Link></MagneticElement>
+            <MagneticElement strength={20}><Link
               to="/pricing"
               className="text-text-muted hover:text-text-primary transition-colors min-h-[44px] flex items-center justify-center px-2"
             >
@@ -241,6 +251,13 @@ export default function App() {
             </div>
             
             <Link
+              to="/dashboard"
+              onClick={() => setIsMobileMenuOpen(false)}
+              className="text-text-primary hover:bg-white/5 p-4 rounded-lg text-center font-medium transition-colors"
+            >
+              Dashboard
+            </Link>
+            <Link
               to="/pricing"
               onClick={() => setIsMobileMenuOpen(false)}
               className="text-text-primary hover:bg-white/5 p-4 rounded-lg text-center font-medium transition-colors"
@@ -260,17 +277,18 @@ export default function App() {
       </nav>
 
       <main className="flex-1 flex flex-col w-full overflow-x-hidden">
-        <AnimatePresence mode="wait">
-          <Routes location={location} key={location.pathname}>
+        <ErrorBoundary>
+          <Routes>
             <Route path="/" element={<LandingPage />} />
             <Route path="/create" element={<CreatePage />} />
+            <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/msg/:id" element={<ViewPage />} />
             <Route path="/pricing" element={<PricingPage />} />
             <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
             <Route path="/terms-of-service" element={<TermsOfServicePage />} />
             <Route path="*" element={<NotFoundPage />} />
           </Routes>
-        </AnimatePresence>
+        </ErrorBoundary>
       </main>
 
       <footer className="border-t border-hairline bg-panel mt-auto py-8 md:py-12 text-center text-sm text-text-muted relative">

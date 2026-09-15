@@ -8,7 +8,7 @@ import { Helmet } from "react-helmet-async";
 import { useTranslation } from "react-i18next";
 
 import { useUser } from '../hooks/useUser';
-import { useRazorpay } from '../hooks/useRazorpay';
+import { loadRazorpay } from '../hooks/useRazorpay';
 import { useState } from 'react';
 import { useCurrency } from '../hooks/useCurrency';
 
@@ -19,9 +19,9 @@ export default function PricingPage() {
   const { userEmail, isPro, loading } = useUser();
   const emailInputRef = React.useRef<HTMLInputElement>(null);
   const [email, setEmail] = useState(localStorage.getItem("qryptnote_user_email") || "");
-  const isRazorpayLoaded = useRazorpay();
   const [isProcessing, setIsProcessing] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+  const [isSuccess, setIsSuccess] = useState(false);
 
   
   
@@ -39,14 +39,16 @@ export default function PricingPage() {
     }
     localStorage.setItem('qryptnote_user_email', email);
 
-    if (!isRazorpayLoaded) {
-      setErrorMsg("Payment gateway loading, please try again.");
-      return;
-    }
-    
     setErrorMsg("");
     setIsProcessing(true);
 
+    const isRazorpayLoaded = await loadRazorpay();
+    if (!isRazorpayLoaded) {
+      setErrorMsg("Payment gateway loading failed, please try again.");
+      setIsProcessing(false);
+      return;
+    }
+    
     try {
       const response = await fetch('/api/create-subscription', {
         method: 'POST',
@@ -66,8 +68,8 @@ export default function PricingPage() {
         name: "QryptNote",
         description: "QryptNote Pro Subscription",
         handler: function (response: any) {
-          alert("Payment successful! Your account will be upgraded to Pro shortly.");
-          window.location.reload();
+          setIsSuccess(true);
+          window.dispatchEvent(new Event('qryptnote-user-updated'));
         },
         theme: {
           color: "#7C5CFF"
@@ -86,6 +88,34 @@ export default function PricingPage() {
       setIsProcessing(false);
     }
   };
+
+  if (isSuccess) {
+    return (
+      <PageTransition>
+        <div className="max-w-7xl mx-auto px-6 py-24 min-h-[70vh] flex flex-col items-center justify-center">
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="bg-panel border border-violet/30 rounded-3xl p-10 max-w-lg w-full text-center flex flex-col items-center shadow-[0_0_40px_rgba(124,92,255,0.15)]"
+          >
+            <div className="w-24 h-24 bg-green-500/20 text-green-400 rounded-full flex items-center justify-center mb-8">
+              <Check className="w-12 h-12" />
+            </div>
+            <h2 className="text-3xl sm:text-4xl font-display font-bold text-text-primary mb-4">Payment Successful!</h2>
+            <p className="text-text-muted mb-10 font-sans text-lg">
+              Thank you for subscribing to QryptNote Pro. Your account has been upgraded and you now have access to all premium features.
+            </p>
+            <Link
+              to="/"
+              className="bg-violet hover:bg-violet/90 text-white font-sans font-medium py-4 px-10 rounded-xl transition-all hover:scale-105 active:scale-95 shadow-[0_0_20px_rgba(124,92,255,0.3)]"
+            >
+              Return to Home
+            </Link>
+          </motion.div>
+        </div>
+      </PageTransition>
+    );
+  }
 
   return (
     <PageTransition>
