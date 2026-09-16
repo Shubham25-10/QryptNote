@@ -212,11 +212,11 @@ export default function DashboardPage() {
           <motion.div 
             animate={{ y: [0, -12, 0] }}
             transition={{ repeat: Infinity, duration: 4, ease: "easeInOut" }}
-            className="relative w-32 h-32 mb-8 flex items-center justify-center"
+            className="relative w-32 h-32 mb-8 flex items-center justify-center group"
           >
-            <div className="absolute inset-0 bg-violet/10 rounded-[2rem] rotate-6 scale-105 border border-violet/20" />
-            <div className="absolute inset-0 bg-panel border border-hairline rounded-[2rem] -rotate-3 shadow-2xl" />
-            <Ghost className="w-14 h-14 text-violet relative z-10 drop-shadow-[0_0_15px_rgba(239,35,60,0.5)]" />
+            <div className="absolute inset-0 bg-violet/10 rounded-[2rem] rotate-6 scale-105 border border-violet/20 transition-all duration-500 ease-out group-hover:rotate-12 group-hover:scale-[1.15] group-hover:bg-violet/20" />
+            <div className="absolute inset-0 bg-panel border border-hairline rounded-[2rem] -rotate-3 shadow-2xl transition-all duration-500 ease-out group-hover:border-violet/50 group-hover:shadow-[0_0_40px_rgba(239,35,60,0.4)]" />
+            <Ghost className="w-14 h-14 text-violet relative z-10 drop-shadow-[0_0_15px_rgba(239,35,60,0.5)] transition-all duration-500 ease-out group-hover:scale-125 group-hover:drop-shadow-[0_0_30px_rgba(239,35,60,0.9)]" />
           </motion.div>
           
           <h2 className="text-3xl md:text-4xl font-display font-bold text-text-primary mb-4 tracking-tight">
