@@ -9,10 +9,12 @@ import { Helmet } from 'react-helmet-async';
 import { useTranslation } from 'react-i18next';
 import { TypewriterText } from '../components/TypewriterText';
 import { decryptMessage, hashPassword } from '../lib/crypto';
+import { FileTypeIcon } from '../components/FileTypeIcon';
 
-const getFileIcon = (fileType: string, fileName: string) => {
-  const type = fileType.toLowerCase();
-  const name = fileName.toLowerCase();
+const getFileIcon = (fileType: string, fileName: string, isFolder?: boolean) => {
+  if (isFolder) return FileArchive;
+  const type = (fileType || '').toLowerCase();
+  const name = (fileName || '').toLowerCase();
   
   if (type.startsWith('image/')) return ImageIcon;
   if (type.startsWith('video/')) return FileVideo;
@@ -38,7 +40,14 @@ export default function ViewPage() {
   const [password, setPassword] = useState('');
   const [decrypting, setDecrypting] = useState(false);
   const [message, setMessage] = useState('');
-  const [fileData, setFileData] = useState<{name: string, type: string, data: string} | null>(null);
+  const [fileData, setFileData] = useState<{
+    name: string;
+    type: string;
+    size?: number;
+    data: string;
+    isFolder?: boolean;
+    itemCount?: number;
+  } | null>(null);
   
   // Anti-Screenshot / Ephemeral State
   const [revealed, setRevealed] = useState(false);
@@ -290,27 +299,61 @@ export default function ViewPage() {
                 </p>
               )}
               {fileData && (
-                <div className="mt-4 p-4 bg-ink border border-hairline rounded-xl flex items-center justify-between">
-                  <div className="flex items-center gap-3 text-left">
-                    <div className="w-10 h-10 bg-violet/10 rounded-lg flex items-center justify-center border border-violet/20">
-                      {(() => {
-                        const IconComponent = getFileIcon(fileData.type, fileData.name);
-                        return <IconComponent className="w-5 h-5 text-violet" />;
-                      })()}
-                    </div>
-                    <div>
-                      <p className="font-sans font-medium text-text-primary text-sm truncate max-w-[200px] sm:max-w-[300px]">
-                        {fileData.name}
+                <div className="mt-4 p-4 bg-ink border border-hairline rounded-xl flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 text-left overflow-hidden">
+                    <FileTypeIcon
+                      fileType={fileData.type}
+                      fileName={fileData.name}
+                      isFolder={fileData.isFolder}
+                      hasFile={true}
+                      fileSize={null}
+                      size="lg"
+                      showBadge={false}
+                    />
+                    <div className="overflow-hidden">
+                      <div className="flex items-center gap-2">
+                        <p className="font-sans font-medium text-text-primary text-sm truncate max-w-[180px] sm:max-w-[280px]">
+                          {fileData.name}
+                        </p>
+                        <FileTypeIcon
+                          fileType={fileData.type}
+                          fileName={fileData.name}
+                          isFolder={fileData.isFolder}
+                          hasFile={true}
+                          size="sm"
+                          showBadge={true}
+                          className="[&>div:first-child]:hidden"
+                        />
+                      </div>
+                      <p className="font-sans text-xs text-text-muted flex items-center gap-2 mt-0.5">
+                        <span>{fileData.isFolder ? `Folder Archive (ZIP)` : 'Secure File Attachment'}</span>
+                        {fileData.size ? (
+                          <>
+                            <span>•</span>
+                            <span className="text-teal font-medium">
+                              {fileData.size < 1024 * 1024 
+                                ? `${(fileData.size / 1024).toFixed(1)} KB` 
+                                : fileData.size < 1024 * 1024 * 1024 
+                                ? `${(fileData.size / (1024 * 1024)).toFixed(1)} MB` 
+                                : `${(fileData.size / (1024 * 1024 * 1024)).toFixed(2)} GB`}
+                            </span>
+                          </>
+                        ) : null}
+                        {fileData.itemCount ? (
+                          <>
+                            <span>•</span>
+                            <span className="text-violet">{fileData.itemCount} files</span>
+                          </>
+                        ) : null}
                       </p>
-                      <p className="font-sans text-xs text-text-muted">Secure File Attachment</p>
                     </div>
                   </div>
                   <button
                     onClick={handleDownload}
                     disabled={isDownloading || downloadSuccess}
-                    className="flex items-center gap-2 px-4 py-2 bg-violet hover:bg-violet/90 text-white rounded-lg font-sans text-sm transition-colors shadow-[0_0_10px_rgba(124,92,255,0.2)] disabled:opacity-70 justify-center"
+                    className="flex items-center gap-2 px-4 py-2 bg-violet hover:bg-violet/90 text-white rounded-lg font-sans text-sm font-medium transition-colors shadow-[0_0_10px_rgba(124,92,255,0.2)] disabled:opacity-70 justify-center flex-shrink-0"
                   >
-                    {isDownloading ? <Loader2 className="w-4 h-4 animate-spin" /> : (downloadSuccess ? <Check className="w-4 h-4" /> : "Download")}
+                    {isDownloading ? <Loader2 className="w-4 h-4 animate-spin" /> : (downloadSuccess ? <Check className="w-4 h-4" /> : (fileData.isFolder ? "Download Folder" : "Download File"))}
                   </button>
                 </div>
               )}

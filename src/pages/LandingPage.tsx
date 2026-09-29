@@ -156,6 +156,96 @@ export default function LandingPage() {
         </motion.div>
       </section>
 
+      {/* 1GB Free Any File Type Feature Section */}
+      <section className="w-full bg-ink/70 border-t border-hairline py-24 relative z-10 overflow-hidden">
+        <div className="absolute top-0 right-1/4 w-96 h-96 bg-violet/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute bottom-0 left-1/4 w-96 h-96 bg-teal/10 rounded-full blur-3xl pointer-events-none" />
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.5 }}
+          className="max-w-7xl mx-auto px-6 relative z-10"
+        >
+          <div className="bg-panel/70 border border-violet/30 rounded-3xl p-8 sm:p-12 relative overflow-hidden shadow-2xl">
+            <div className="grid md:grid-cols-2 gap-10 items-center">
+              <div>
+                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-violet/15 border border-violet/30 text-xs font-semibold text-violet mb-6">
+                  <span className="w-2 h-2 rounded-full bg-teal animate-pulse" />
+                  1GB Free For Everyone • Zero Cost
+                </div>
+                <h2 className="text-3xl sm:text-4xl font-display font-bold text-white mb-4 tracking-tight">
+                  Share Any File or Folder <br />
+                  <span className="text-transparent bg-clip-text bg-gradient-to-r from-violet via-fuchsia-400 to-teal">
+                    Up to 1GB Completely Free.
+                  </span>
+                </h2>
+                <p className="text-text-muted font-sans text-base sm:text-lg mb-8 leading-relaxed">
+                  No subscription required. Share full-resolution images, HD/4K videos, massive zip archives, entire project folders, and confidential documents with military-grade AES-256 encryption.
+                </p>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+                  <div className="p-3 bg-ink/80 border border-hairline rounded-xl text-center">
+                    <p className="text-xl font-display font-bold text-white mb-0.5">1 GB</p>
+                    <p className="text-xs text-text-muted font-sans">Free Limit</p>
+                  </div>
+                  <div className="p-3 bg-ink/80 border border-hairline rounded-xl text-center">
+                    <p className="text-xl font-display font-bold text-teal mb-0.5">Any File</p>
+                    <p className="text-xs text-text-muted font-sans">Images, Video, Zip</p>
+                  </div>
+                  <div className="p-3 bg-ink/80 border border-hairline rounded-xl text-center">
+                    <p className="text-xl font-display font-bold text-violet mb-0.5">Folders</p>
+                    <p className="text-xs text-text-muted font-sans">Auto-packaged ZIP</p>
+                  </div>
+                  <div className="p-3 bg-ink/80 border border-hairline rounded-xl text-center">
+                    <p className="text-xl font-display font-bold text-amber mb-0.5">AES-256</p>
+                    <p className="text-xs text-text-muted font-sans">Client Encrypted</p>
+                  </div>
+                </div>
+                <Link
+                  to="/create"
+                  className="inline-flex items-center gap-2 px-6 py-3.5 bg-violet hover:bg-violet/90 text-white rounded-xl font-sans font-medium transition-all shadow-[0_0_20px_rgba(124,92,255,0.3)] hover:scale-105 active:scale-95"
+                >
+                  <span>Share 1GB File Free</span>
+                  <Send className="w-4 h-4" />
+                </Link>
+              </div>
+
+              {/* Supported types showcase */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="p-5 bg-ink/80 border border-hairline rounded-2xl hover:border-violet/40 transition-colors">
+                  <div className="w-10 h-10 rounded-xl bg-violet/10 text-violet flex items-center justify-center mb-3 border border-violet/20">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
+                  </div>
+                  <h4 className="font-display font-bold text-text-primary text-base mb-1">Images & Graphics</h4>
+                  <p className="text-xs text-text-muted font-sans">PNG, JPG, RAW, WebP, SVG, GIF with full uncompressed resolution.</p>
+                </div>
+                <div className="p-5 bg-ink/80 border border-hairline rounded-2xl hover:border-violet/40 transition-colors">
+                  <div className="w-10 h-10 rounded-xl bg-teal/10 text-teal flex items-center justify-center mb-3 border border-teal/20">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5"/><rect x="2" y="6" width="14" height="12" rx="2"/></svg>
+                  </div>
+                  <h4 className="font-display font-bold text-text-primary text-base mb-1">Videos & Casts</h4>
+                  <p className="text-xs text-text-muted font-sans">MP4, MOV, MKV, WebM up to 1GB free with zero compression.</p>
+                </div>
+                <div className="p-5 bg-ink/80 border border-hairline rounded-2xl hover:border-violet/40 transition-colors">
+                  <div className="w-10 h-10 rounded-xl bg-amber/10 text-amber flex items-center justify-center mb-3 border border-amber/20">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/></svg>
+                  </div>
+                  <h4 className="font-display font-bold text-text-primary text-base mb-1">Entire Folders</h4>
+                  <p className="text-xs text-text-muted font-sans">Upload entire directories; auto-packaged into encrypted ZIP archives.</p>
+                </div>
+                <div className="p-5 bg-ink/80 border border-hairline rounded-2xl hover:border-violet/40 transition-colors">
+                  <div className="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-400 flex items-center justify-center mb-3 border border-blue-500/20">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>
+                  </div>
+                  <h4 className="font-display font-bold text-text-primary text-base mb-1">ZIP & Any Document</h4>
+                  <p className="text-xs text-text-muted font-sans">PDFs, spreadsheets, codebases, binaries, and custom archives.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      </section>
+
       {/* Use Cases */}
       <section className="w-full bg-ink py-32 relative z-10 border-t border-hairline">
         <motion.div 

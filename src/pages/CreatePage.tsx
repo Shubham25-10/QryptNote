@@ -16,9 +16,12 @@ import {
   Eye,
   ShieldCheck,
   Trash2,
+  Sparkles,
 } from "lucide-react";
 import QRCode from "qrcode";
+import JSZip from "jszip";
 import { Helmet } from "react-helmet-async";
+import { FileDropZone, FileEntryItem } from '../components/FileDropZone';
 import { useTranslation } from "react-i18next";
 import { useUser } from "../hooks/useUser";
 import { db } from "../firebase";
@@ -89,39 +92,134 @@ export default function CreatePage() {
 
   const isSubmitting = useRef(false);
 
-  const [file, setFile] = useState<{name: string, type: string, data: string} | null>(null);
+  const [file, setFile] = useState<{
+    name: string;
+    type: string;
+    size: number;
+    data: string;
+    isFolder?: boolean;
+    itemCount?: number;
+  } | null>(null);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0];
-    if (!f) return;
-    
-    const isVideo = f.type.startsWith('video/');
-    const maxSize = isVideo ? 500 * 1024 * 1024 : 10 * 1024 * 1024;
-    const errorMsg = isVideo 
-      ? t('errors.video_too_large', 'Video too large. Maximum size is 500MB.')
-      : t('errors.file_too_large', 'File too large. Maximum size is 10MB.');
-      
-    if (f.size > maxSize) {
-      setError(errorMsg);
-      e.target.value = '';
-      return;
+  const [isProcessingFile, setIsProcessingFile] = useState(false);
+  const [processingStatus, setProcessingStatus] = useState("");
+  const [uploadProgress, setUploadProgress] = useState(0);
+
+  const formatFileSize = (bytes?: number) => {
+    if (!bytes) return '0 B';
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+  };
+
+  const handleFilesSelected = async (
+    fileEntries: FileEntryItem[],
+    isFolder: boolean,
+    folderName?: string
+  ) => {
+    if (!fileEntries || fileEntries.length === 0) return;
+
+    setError("");
+    const maxFreeSize = 1024 * 1024 * 1024; // 1GB in bytes for all files/folders free!
+    const maxSize = isPro ? 5 * 1024 * 1024 * 1024 : maxFreeSize;
+
+    if (!isFolder && fileEntries.length === 1) {
+      const f = fileEntries[0].file;
+      if (f.size > maxSize) {
+        setError(t('errors.file_too_large', 'File too large. Maximum size is 1GB for free notes.'));
+        return;
+      }
+
+      setIsProcessingFile(true);
+      setProcessingStatus(f.size > 20 * 1024 * 1024 ? 'Reading secure file...' : '');
+
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setFile({
+          name: f.name,
+          type: f.type || 'application/octet-stream',
+          size: f.size,
+          data: event.target?.result as string,
+          isFolder: false,
+        });
+        setIsProcessingFile(false);
+        setProcessingStatus('');
+      };
+      reader.onerror = () => {
+        setError('Failed to read file.');
+        setIsProcessingFile(false);
+        setProcessingStatus('');
+      };
+      reader.readAsDataURL(f);
+    } else {
+      // Multiple files or folder selected / dropped
+      let totalSize = 0;
+      for (let i = 0; i < fileEntries.length; i++) {
+        totalSize += fileEntries[i].file.size;
+      }
+
+      if (totalSize > maxSize) {
+        setError(t('errors.folder_too_large', 'Folder too large. Maximum size is 1GB for free notes.'));
+        return;
+      }
+
+      try {
+        setIsProcessingFile(true);
+        setProcessingStatus(t('create.folder_packaging', 'Packaging folder into secure ZIP archive...'));
+
+        const zip = new JSZip();
+        for (let i = 0; i < fileEntries.length; i++) {
+          const item = fileEntries[i];
+          zip.file(item.relativePath, item.file);
+        }
+
+        const zipName = folderName ? `${folderName}.zip` : 'folder_archive.zip';
+
+        const zipBlob = await zip.generateAsync(
+          { type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } },
+          (metadata) => {
+            setProcessingStatus(`Packaging folder: ${Math.round(metadata.percent)}%`);
+          }
+        );
+
+        setProcessingStatus('Finalizing secure archive...');
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          setFile({
+            name: zipName,
+            type: 'application/zip',
+            size: zipBlob.size,
+            data: event.target?.result as string,
+            isFolder: true,
+            itemCount: fileEntries.length,
+          });
+          setIsProcessingFile(false);
+          setProcessingStatus('');
+        };
+        reader.onerror = () => {
+          setError('Failed to process packaged folder.');
+          setIsProcessingFile(false);
+          setProcessingStatus('');
+        };
+        reader.readAsDataURL(zipBlob);
+      } catch (err: any) {
+        console.error('Error zipping folder:', err);
+        setError('Failed to package folder: ' + (err.message || 'Unknown error'));
+        setIsProcessingFile(false);
+        setProcessingStatus('');
+      }
     }
-    
-    // For very large files, this might take a moment
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      setFile({
-        name: f.name,
-        type: f.type,
-        data: event.target?.result as string,
-      });
-    };
-    reader.readAsDataURL(f);
+  };
+
+  const handleRemoveFile = () => {
+    setFile(null);
   };
 
   const submitMessage = async (razorpayOrderId?: string, razorpayPaymentId?: string) => {
     isSubmitting.current = true;
     setIsLoading(true);
+    setUploadProgress(0);
     setError("");
 
     try {
@@ -152,6 +250,11 @@ export default function CreatePage() {
         viewCount: 0,
         passwordHash: pwdHash,
         createdAt: Date.now(),
+        hasFile: !!file,
+        fileName: file?.name || null,
+        fileType: file?.type || null,
+        fileSize: file?.size || null,
+        isFolder: file?.isFolder || false,
         ...(razorpayOrderId && razorpayPaymentId ? {
           paidFeatureUnlock: true,
           razorpayOrderId,
@@ -186,15 +289,25 @@ export default function CreatePage() {
       const token = resData.destructionToken;
       setDestructionToken(token);
 
-      // Upload sequentially to avoid overwhelming the server
-      for (const [i, chunk] of clientChunks.entries()) {
-        const formData = new FormData();
-        formData.append('id', id);
-        formData.append('chunkIndex', i.toString());
-        formData.append('chunk', new Blob([chunk], { type: 'text/plain' }), `chunk_${i}.txt`);
+      // Upload with concurrency of 4 and progress tracking
+      if (clientChunks.length > 0) {
+        const concurrency = 4;
+        let completed = 0;
+        for (let i = 0; i < clientChunks.length; i += concurrency) {
+          const batch = clientChunks.slice(i, i + concurrency);
+          await Promise.all(batch.map(async (chunk, batchIdx) => {
+            const chunkIdx = i + batchIdx;
+            const formData = new FormData();
+            formData.append('id', id);
+            formData.append('chunkIndex', chunkIdx.toString());
+            formData.append('chunk', new Blob([chunk], { type: 'text/plain' }), `chunk_${chunkIdx}.txt`);
 
-        const chunkRes = await fetch('/api/upload-chunk', { method: 'POST', body: formData });
-        if (!chunkRes.ok) throw new Error(`Failed to upload file chunk ${i + 1} of ${clientChunks.length}`);
+            const chunkRes = await fetch('/api/upload-chunk', { method: 'POST', body: formData });
+            if (!chunkRes.ok) throw new Error(`Failed to upload file chunk ${chunkIdx + 1} of ${clientChunks.length}`);
+            completed++;
+            setUploadProgress(Math.round((completed / clientChunks.length) * 100));
+          }));
+        }
       }
 
       // Generate URL and QR
@@ -212,9 +325,18 @@ export default function CreatePage() {
       setResultUrl(viewUrl);
       setCreatedMessageId(id);
       
-      // Store destruction token in localStorage for easy management later
+      // Store destruction token and file metadata in localStorage for easy management later
       const sentNotes = JSON.parse(localStorage.getItem('sent_notes') || '[]');
-      sentNotes.push({ id, destructionToken: token, createdAt: Date.now() });
+      sentNotes.push({
+        id,
+        destructionToken: token,
+        createdAt: Date.now(),
+        hasFile: !!file,
+        fileName: file?.name || null,
+        fileType: file?.type || null,
+        fileSize: file?.size || null,
+        isFolder: file?.isFolder || false,
+      });
       localStorage.setItem('sent_notes', JSON.stringify(sentNotes));
       
       setMessageStatus({ status: "active", viewCount: 0 });
@@ -553,25 +675,31 @@ export default function CreatePage() {
             />
           </div>
 
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-4">
-            <label className="cursor-pointer flex items-center gap-2 px-4 py-2 bg-ink border border-hairline rounded-lg text-text-primary hover:bg-panel transition-colors font-sans text-sm">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-violet"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
-              {file ? t('create.change_file', 'Change File') : t('create.attach_file', 'Attach File')}
-              <input type="file" className="hidden" onChange={handleFileChange} />
-            </label>
-            {file && (
-              <div className="flex items-center gap-2 px-3 py-1 bg-violet/10 border border-violet/20 rounded text-violet text-sm">
-                <span className="truncate max-w-[150px]">{file.name}</span>
-                <button type="button" onClick={() => setFile(null)} className="hover:text-red-400 transition-colors">
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-            )}
+        {/* Drag-and-Drop Zone for File & Folder Uploads */}
+        <div className="space-y-2">
+          <FileDropZone
+            file={file}
+            onFilesSelected={handleFilesSelected}
+            onRemoveFile={handleRemoveFile}
+            isProcessing={isProcessingFile}
+            processingStatus={processingStatus}
+            disabled={isLoading}
+            formatFileSize={formatFileSize}
+          />
+
+          {/* Info and file format pills */}
+          <div className="flex flex-col gap-1.5 pl-1">
+            <p className="text-xs text-text-muted font-sans leading-relaxed">
+              {t('create.file_info', 'Share any file type for free up to 1GB — images, videos, zip archives, entire folders, documents, audio, and all formats.')}
+            </p>
+            <div className="flex flex-wrap gap-1.5 pt-0.5">
+              {["🖼️ Images", "🎬 Videos", "📦 ZIP Archives", "📁 Folders", "📄 PDFs & Docs", "🎵 Audio", "💻 Code", "⚡ Any Format"].map((badge, idx) => (
+                <span key={idx} className="text-[11px] font-sans px-2 py-0.5 rounded bg-ink border border-hairline/60 text-text-muted/80">
+                  {badge}
+                </span>
+              ))}
+            </div>
           </div>
-          <p className="text-xs text-text-muted font-sans pl-1">
-            {t('create.file_info', 'You can attach any file type. Videos can be up to 500MB, and all other files up to 10MB.')}
-          </p>
         </div>
 
           <div className="bg-panel border border-hairline rounded-2xl p-6 shadow-lg">
@@ -694,13 +822,22 @@ export default function CreatePage() {
           <MagneticElement strength={15} className="w-full"><motion.button
             whileTap={{ scale: 0.96 }}
             type="submit"
-            disabled={isLoading || isProcessingPayment || !message.trim() || message.length > maxChars || showPayPrompt}
-            className={`w-full ${showPayPrompt ? 'hidden' : 'flex'} bg-amber hover:bg-amber/90 text-ink font-sans font-medium text-lg py-4 rounded-xl items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_15px_rgba(124,92,255,0.2)] hover:shadow-[0_0_25px_rgba(124,92,255,0.4)] ${message.length > 0 ? 'fixed md:static bottom-6 left-6 right-6 w-[calc(100%-3rem)] md:w-full z-50' : ''}`}
+            disabled={isLoading || isProcessingPayment || (!message.trim() && !file) || message.length > maxChars || showPayPrompt || isProcessingFile}
+            className={`w-full ${showPayPrompt ? 'hidden' : 'flex'} bg-amber hover:bg-amber/90 text-ink font-sans font-medium text-lg py-4 rounded-xl items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_15px_rgba(124,92,255,0.2)] hover:shadow-[0_0_25px_rgba(124,92,255,0.4)] ${(message.length > 0 || file) ? 'fixed md:static bottom-6 left-6 right-6 w-[calc(100%-3rem)] md:w-full z-50' : ''}`}
           >
             {isLoading ? (
               <>
                 <Loader2 className="w-5 h-5 animate-spin" />
-                {isSubmitting.current ? "Generating QR..." : "Encrypting..."}
+                {uploadProgress > 0
+                  ? `Uploading chunks (${uploadProgress}%)...`
+                  : isSubmitting.current
+                  ? "Generating Secure QR..."
+                  : "Encrypting with AES-256..."}
+              </>
+            ) : isProcessingFile ? (
+              <>
+                <Loader2 className="w-5 h-5 animate-spin" />
+                Processing Attachment...
               </>
             ) : (
               t("create.gen_qr")

@@ -1,16 +1,23 @@
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Link } from 'react-router';
-import { Shield, AlertCircle, Copy, QrCode, Trash2, CheckCircle, Ghost, Lock, Clock, Eye, ShieldCheck, X } from 'lucide-react';
+import { Shield, AlertCircle, Copy, QrCode, Trash2, CheckCircle, CheckCircle2, Link2, Ghost, Lock, Clock, Eye, ShieldCheck, X, FileUp, Filter } from 'lucide-react';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import QRCode from 'qrcode';
 import { ErrorBoundary } from '../components/ErrorBoundary';
+import { FileTypeIcon } from '../components/FileTypeIcon';
+import { Toast } from '../components/Toast';
 
 interface LocalNote {
   id: string;
   destructionToken: string;
   createdAt: number;
+  hasFile?: boolean;
+  fileName?: string | null;
+  fileType?: string | null;
+  fileSize?: number | null;
+  isFolder?: boolean;
 }
 
 interface NoteStatus {
@@ -23,6 +30,11 @@ interface NoteStatus {
   isEncrypted: boolean;
   hasPassword: boolean;
   status: 'active' | 'burned';
+  hasFile?: boolean;
+  fileName?: string | null;
+  fileType?: string | null;
+  fileSize?: number | null;
+  isFolder?: boolean;
 }
 
 export default function DashboardPage() {
@@ -32,6 +44,14 @@ export default function DashboardPage() {
   const [error, setError] = useState("");
   const [qrModal, setQrModal] = useState<{url: string, id: string} | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [filterType, setFilterType] = useState<'all' | 'files' | 'text'>('all');
+  const [toast, setToast] = useState<{
+    show: boolean;
+    title: string;
+    message: string;
+    badge?: string;
+    icon?: 'check' | 'link' | 'copy';
+  } | null>(null);
 
   useEffect(() => {
     setIsMounted(true);
@@ -74,7 +94,12 @@ export default function DashboardPage() {
                 viewLimit: data.viewLimit || 1,
                 isEncrypted: data.isEncrypted || true,
                 hasPassword: data.hasPassword || false,
-                status: isBurned ? 'burned' : 'active'
+                status: isBurned ? 'burned' : 'active',
+                hasFile: data.hasFile ?? local.hasFile,
+                fileName: data.fileName || local.fileName || null,
+                fileType: data.fileType || local.fileType || null,
+                fileSize: data.fileSize || local.fileSize || null,
+                isFolder: data.isFolder ?? local.isFolder ?? false,
               });
             } else {
               noteStatuses.push({
@@ -86,7 +111,12 @@ export default function DashboardPage() {
                 viewLimit: 1,
                 isEncrypted: true,
                 hasPassword: false,
-                status: 'burned'
+                status: 'burned',
+                hasFile: local.hasFile,
+                fileName: local.fileName || null,
+                fileType: local.fileType || null,
+                fileSize: local.fileSize || null,
+                isFolder: local.isFolder ?? false,
               });
             }
           } catch (e) {
@@ -101,7 +131,12 @@ export default function DashboardPage() {
               viewLimit: 1,
               isEncrypted: true,
               hasPassword: false,
-              status: 'active'
+              status: 'active',
+              hasFile: local.hasFile,
+              fileName: local.fileName || null,
+              fileType: local.fileType || null,
+              fileSize: local.fileSize || null,
+              isFolder: local.isFolder ?? false,
             });
           }
         }));
@@ -127,11 +162,39 @@ export default function DashboardPage() {
     );
   }
 
-  const copyLink = (id: string) => {
-    const url = `${window.location.origin}/msg/${id}`;
+  const copyShareLink = (note: {
+    id: string;
+    fileName?: string | null;
+    fileType?: string | null;
+    isFolder?: boolean;
+    hasFile?: boolean;
+  }) => {
+    const url = `${window.location.origin}/msg/${note.id}`;
     navigator.clipboard.writeText(url);
-    setCopiedId(id);
+    setCopiedId(note.id);
     setTimeout(() => setCopiedId(null), 2000);
+
+    const isFile = note.hasFile || !!note.fileName || !!note.isFolder;
+    const badge = note.isFolder
+      ? 'ZIP FOLDER'
+      : note.fileName
+      ? note.fileName.split('.').pop()?.toUpperCase() || 'FILE'
+      : isFile
+      ? 'FILE'
+      : 'NOTE';
+
+    setToast({
+      show: true,
+      title: isFile ? 'Encrypted File Link Copied!' : 'Secret Share Link Copied!',
+      message: url,
+      badge,
+      icon: 'check',
+    });
+  };
+
+  const copyLink = (id: string) => {
+    const found = notes.find((n) => n.id === id);
+    copyShareLink(found || { id });
   };
 
   const showQr = async (id: string) => {
@@ -240,6 +303,14 @@ export default function DashboardPage() {
     const totalCreated = notes.length;
     const activeCount = notes.filter(n => n.status === 'active').length;
     const burnedCount = notes.filter(n => n.status === 'burned').length;
+    const filesCount = notes.filter(n => n.hasFile || n.fileName || n.isFolder).length;
+    const textCount = notes.filter(n => !n.hasFile && !n.fileName && !n.isFolder).length;
+
+    const filteredNotes = notes.filter((n) => {
+      if (filterType === 'files') return n.hasFile || n.fileName || n.isFolder;
+      if (filterType === 'text') return !n.hasFile && !n.fileName && !n.isFolder;
+      return true;
+    });
 
     content = (
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-12 w-full animate-in fade-in duration-500">
@@ -248,7 +319,7 @@ export default function DashboardPage() {
             <h1 className="text-3xl md:text-4xl font-display font-bold text-text-primary mb-2">
               Dashboard
             </h1>
-            <p className="text-text-muted">Manage your local self-destructing notes.</p>
+            <p className="text-text-muted">Manage your local self-destructing notes and file transfers.</p>
           </div>
           <Link 
             to="/create"
@@ -258,39 +329,91 @@ export default function DashboardPage() {
           </Link>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 md:gap-6 mb-10">
-          <div className="bg-panel border border-hairline rounded-2xl p-6 relative overflow-hidden group">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-8">
+          <div className="bg-panel border border-hairline rounded-2xl p-5 relative overflow-hidden group">
             <div className="absolute -right-4 -bottom-4 opacity-5 group-hover:opacity-10 transition-opacity">
               <Shield className="w-24 h-24" />
             </div>
-            <div className="flex items-center gap-3 text-text-muted mb-4">
+            <div className="flex items-center gap-3 text-text-muted mb-3">
               <ShieldCheck className="w-5 h-5 text-violet" />
-              <span className="font-medium">Total Secrets Created</span>
+              <span className="font-medium text-xs sm:text-sm">Total Secrets</span>
             </div>
-            <div className="text-4xl font-display font-bold text-text-primary">{totalCreated}</div>
+            <div className="text-3xl sm:text-4xl font-display font-bold text-text-primary">{totalCreated}</div>
           </div>
           
-          <div className="bg-panel border border-hairline rounded-2xl p-6 relative overflow-hidden group">
+          <div className="bg-panel border border-hairline rounded-2xl p-5 relative overflow-hidden group">
             <div className="absolute -right-4 -bottom-4 opacity-5 group-hover:opacity-10 transition-opacity">
               <Eye className="w-24 h-24" />
             </div>
-            <div className="flex items-center gap-3 text-text-muted mb-4">
+            <div className="flex items-center gap-3 text-text-muted mb-3">
               <Clock className="w-5 h-5 text-amber" />
-              <span className="font-medium">Active (Unread) Secrets</span>
+              <span className="font-medium text-xs sm:text-sm">Active (Unread)</span>
             </div>
-            <div className="text-4xl font-display font-bold text-text-primary">{activeCount}</div>
+            <div className="text-3xl sm:text-4xl font-display font-bold text-text-primary">{activeCount}</div>
+          </div>
+
+          <div className="bg-panel border border-hairline rounded-2xl p-5 relative overflow-hidden group">
+            <div className="absolute -right-4 -bottom-4 opacity-5 group-hover:opacity-10 transition-opacity">
+              <FileUp className="w-24 h-24" />
+            </div>
+            <div className="flex items-center gap-3 text-text-muted mb-3">
+              <FileUp className="w-5 h-5 text-emerald-400" />
+              <span className="font-medium text-xs sm:text-sm">Files & Media</span>
+            </div>
+            <div className="text-3xl sm:text-4xl font-display font-bold text-text-primary">{filesCount}</div>
           </div>
           
-          <div className="bg-panel border border-hairline rounded-2xl p-6 relative overflow-hidden group">
+          <div className="bg-panel border border-hairline rounded-2xl p-5 relative overflow-hidden group">
             <div className="absolute -right-4 -bottom-4 opacity-5 group-hover:opacity-10 transition-opacity">
               <Ghost className="w-24 h-24" />
             </div>
-            <div className="flex items-center gap-3 text-text-muted mb-4">
+            <div className="flex items-center gap-3 text-text-muted mb-3">
               <Ghost className="w-5 h-5 text-text-secondary" />
-              <span className="font-medium">Destroyed / Expired</span>
+              <span className="font-medium text-xs sm:text-sm">Destroyed / Expired</span>
             </div>
-            <div className="text-4xl font-display font-bold text-text-primary">{burnedCount}</div>
+            <div className="text-3xl sm:text-4xl font-display font-bold text-text-primary">{burnedCount}</div>
           </div>
+        </div>
+
+        {/* Filter Bar */}
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <div className="flex items-center gap-1.5 p-1 bg-ink/60 border border-hairline rounded-xl">
+            <button
+              onClick={() => setFilterType('all')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                filterType === 'all'
+                  ? 'bg-violet text-white shadow-[0_0_10px_rgba(124,92,255,0.3)]'
+                  : 'text-text-muted hover:text-text-primary'
+              }`}
+            >
+              All ({totalCreated})
+            </button>
+            <button
+              onClick={() => setFilterType('files')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${
+                filterType === 'files'
+                  ? 'bg-violet text-white shadow-[0_0_10px_rgba(124,92,255,0.3)]'
+                  : 'text-text-muted hover:text-text-primary'
+              }`}
+            >
+              <FileUp className="w-3.5 h-3.5" />
+              <span>Files & Folders ({filesCount})</span>
+            </button>
+            <button
+              onClick={() => setFilterType('text')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                filterType === 'text'
+                  ? 'bg-violet text-white shadow-[0_0_10px_rgba(124,92,255,0.3)]'
+                  : 'text-text-muted hover:text-text-primary'
+              }`}
+            >
+              Text Notes ({textCount})
+            </button>
+          </div>
+
+          <span className="text-xs text-text-muted">
+            Showing {filteredNotes.length} of {totalCreated} secret{totalCreated === 1 ? '' : 's'}
+          </span>
         </div>
 
         <div className="bg-panel border border-hairline rounded-2xl overflow-hidden shadow-xl">
@@ -299,6 +422,7 @@ export default function DashboardPage() {
               <thead className="text-text-muted bg-white/5">
                 <tr>
                   <th className="px-6 py-4 font-medium">Note ID</th>
+                  <th className="px-6 py-4 font-medium">Type & Payload</th>
                   <th className="px-6 py-4 font-medium">Created At</th>
                   <th className="px-6 py-4 font-medium">Expiration</th>
                   <th className="px-6 py-4 font-medium">Status</th>
@@ -306,67 +430,115 @@ export default function DashboardPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-hairline">
-                {notes.map((note) => (
-                  <tr key={note.id} className="hover:bg-white/[0.02] transition-colors group">
-                    <td className="px-6 py-4">
-                      <span className="font-mono text-text-secondary bg-ink px-2 py-1 rounded-md text-xs border border-hairline">
-                        {note.id.substring(0, 8)}...
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-text-secondary">
-                      {new Date(note.createdAt).toLocaleString(undefined, { 
-                        year: 'numeric', month: 'short', day: 'numeric', 
-                        hour: '2-digit', minute: '2-digit' 
-                      })}
-                    </td>
-                    <td className="px-6 py-4 text-text-secondary">
-                      {getExpirationText(note.expiryTimestamp, note.status)}
-                    </td>
-                    <td className="px-6 py-4">
-                      {note.status === 'active' ? (
-                        <div className="flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded-md bg-green-400/10 text-green-400 w-fit">
-                          <CheckCircle className="w-3.5 h-3.5" />
-                          <span>Active</span>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded-md bg-red-400/10 text-red-400 w-fit">
-                          <Ghost className="w-3.5 h-3.5" />
-                          <span>Burned</span>
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 flex items-center justify-end gap-2 opacity-100 sm:opacity-50 sm:group-hover:opacity-100 transition-opacity">
-                      {note.status === 'active' ? (
-                        <>
-                          <button 
-                            onClick={() => copyLink(note.id)}
-                            className="p-2 hover:bg-white/10 rounded-lg text-text-secondary hover:text-white transition-colors"
-                            title="Copy Link"
-                          >
-                            {copiedId === note.id ? <CheckCircle className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
-                          </button>
-                          <button 
-                            onClick={() => showQr(note.id)}
-                            className="p-2 hover:bg-white/10 rounded-lg text-text-secondary hover:text-white transition-colors"
-                            title="Show QR Code"
-                          >
-                            <QrCode className="w-4 h-4" />
-                          </button>
-                          <button 
-                            onClick={() => revokeNote(note.id, note.destructionToken)}
-                            className="flex items-center gap-1.5 px-3 py-1.5 hover:bg-red-500/10 rounded-lg text-red-400/80 hover:text-red-400 transition-colors ml-2 border border-transparent hover:border-red-500/20"
-                            title="Revoke / Destroy Now"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                            <span className="text-xs font-medium">Revoke</span>
-                          </button>
-                        </>
-                      ) : (
-                        <span className="text-text-muted text-xs italic px-3 py-1.5">No actions</span>
-                      )}
+                {filteredNotes.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-6 py-12 text-center text-text-muted">
+                      <div className="flex flex-col items-center justify-center gap-2">
+                        <Filter className="w-8 h-8 opacity-40 mb-1" />
+                        <p className="font-medium text-sm text-text-secondary">No secrets found in this view</p>
+                        <button 
+                          onClick={() => setFilterType('all')}
+                          className="text-xs text-violet hover:underline mt-1"
+                        >
+                          Show all secrets
+                        </button>
+                      </div>
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  filteredNotes.map((note) => (
+                    <tr key={note.id} className="hover:bg-white/[0.02] transition-colors group">
+                      <td className="px-6 py-4">
+                        <button
+                          onClick={() => copyShareLink(note)}
+                          className="group/id cursor-pointer font-mono text-text-secondary hover:text-white bg-ink hover:bg-panel px-2 py-1 rounded-md text-xs border border-hairline hover:border-violet/40 transition-all flex items-center gap-1.5"
+                          title="Click to copy share link"
+                        >
+                          <span>{note.id.substring(0, 8)}...</span>
+                          <Copy className="w-3 h-3 text-violet opacity-50 group-hover/id:opacity-100 transition-opacity" />
+                        </button>
+                      </td>
+                      <td className="px-6 py-4">
+                        <FileTypeIcon
+                          fileType={note.fileType}
+                          fileName={note.fileName}
+                          isFolder={note.isFolder}
+                          hasFile={note.hasFile}
+                          fileSize={note.fileSize}
+                          size="sm"
+                          showBadge={true}
+                          showName={true}
+                        />
+                      </td>
+                      <td className="px-6 py-4 text-text-secondary">
+                        {new Date(note.createdAt).toLocaleString(undefined, { 
+                          year: 'numeric', month: 'short', day: 'numeric', 
+                          hour: '2-digit', minute: '2-digit' 
+                        })}
+                      </td>
+                      <td className="px-6 py-4 text-text-secondary">
+                        {getExpirationText(note.expiryTimestamp, note.status)}
+                      </td>
+                      <td className="px-6 py-4">
+                        {note.status === 'active' ? (
+                          <div className="flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded-md bg-green-400/10 text-green-400 w-fit">
+                            <CheckCircle className="w-3.5 h-3.5" />
+                            <span>Active</span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded-md bg-red-400/10 text-red-400 w-fit">
+                            <Ghost className="w-3.5 h-3.5" />
+                            <span>Burned</span>
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 flex items-center justify-end gap-2">
+                        {note.status === 'active' ? (
+                          <>
+                            <button 
+                              onClick={() => copyShareLink(note)}
+                              className={`cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                                copiedId === note.id
+                                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 shadow-[0_0_12px_rgba(52,211,153,0.3)]'
+                                  : 'bg-violet/10 hover:bg-violet/20 text-violet border border-violet/20 hover:border-violet/40 hover:text-white shadow-[0_0_8px_rgba(124,92,255,0.15)]'
+                              }`}
+                              title="Copy Share Link to Clipboard"
+                            >
+                              {copiedId === note.id ? (
+                                <>
+                                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                                  <span>Copied!</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Copy className="w-3.5 h-3.5" />
+                                  <span>Copy Link</span>
+                                </>
+                              )}
+                            </button>
+                            <button 
+                              onClick={() => showQr(note.id)}
+                              className="cursor-pointer p-2 hover:bg-white/10 rounded-lg text-text-secondary hover:text-white transition-colors"
+                              title="Show QR Code"
+                            >
+                              <QrCode className="w-4 h-4" />
+                            </button>
+                            <button 
+                              onClick={() => revokeNote(note.id, note.destructionToken)}
+                              className="cursor-pointer flex items-center gap-1.5 px-3 py-1.5 hover:bg-red-500/10 rounded-lg text-red-400/80 hover:text-red-400 transition-colors ml-1 border border-transparent hover:border-red-500/20"
+                              title="Revoke / Destroy Now"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                              <span className="text-xs font-medium hidden md:inline">Revoke</span>
+                            </button>
+                          </>
+                        ) : (
+                          <span className="text-text-muted text-xs italic px-3 py-1.5">No actions</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -421,6 +593,22 @@ export default function DashboardPage() {
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* Toast Notification */}
+        {toast && (
+          <Toast
+            show={toast.show}
+            onClose={() => setToast(null)}
+            title={toast.title}
+            message={toast.message}
+            badge={toast.badge}
+            icon={toast.icon || 'check'}
+            action={{
+              label: 'Open Link',
+              onClick: () => window.open(toast.message, '_blank'),
+            }}
+          />
+        )}
       </div>
     </ErrorBoundary>
   );

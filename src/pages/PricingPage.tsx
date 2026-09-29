@@ -131,7 +131,7 @@ export default function PricingPage() {
           Simple, Transparent Pricing
         </h1>
         <p className="text-lg sm:text-xl text-text-muted font-sans px-4">
-          Choose the level of security that fits your needs.
+          Choose the level of security that fits your needs. Share any file or folder up to 1GB completely free.
         </p>
       </div>
 
@@ -143,6 +143,10 @@ export default function PricingPage() {
           className="bg-panel/50 border border-hairline rounded-3xl p-6 sm:p-10 flex flex-col transition-colors hover:border-violet/30"
         >
           <div className="mb-8">
+            <div className="mb-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-teal/10 border border-teal/20 text-xs font-semibold text-teal font-sans">
+              <span className="w-1.5 h-1.5 rounded-full bg-teal animate-pulse"></span>
+              1GB Free Any File Type Included
+            </div>
             <h2 className="text-2xl font-display font-bold mb-2 text-text-primary">
               {t("pricing.free")}
             </h2>

@@ -163,7 +163,7 @@ app.use((req, res, next) => {
     if (req.body && typeof req.body === 'object' && Object.keys(req.body).length > 0) {
       next();
     } else {
-      express.json({ limit: '600mb' })(req, res, next);
+      express.json({ limit: '1500mb' })(req, res, next);
     }
   });
 
@@ -589,7 +589,12 @@ app.use((req, res, next) => {
     return template;
   };
 
-  const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } }); // 10MB individual chunk limit
+  const CHUNKS_DIR = path.join(process.cwd(), 'temp_chunks');
+  if (!fs.existsSync(CHUNKS_DIR)) {
+    try { fs.mkdirSync(CHUNKS_DIR, { recursive: true }); } catch (e) {}
+  }
+
+  const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } }); // 25MB individual chunk limit
 
   app.post('/api/upload-chunk', upload.single('chunk'), async (req, res) => {
     try {
@@ -603,6 +608,18 @@ app.use((req, res, next) => {
       }
 
       const chunkData = req.file.buffer.toString('utf-8');
+
+      // Persist to local disk cache first for speed and 1GB file resilience
+      try {
+        const messageDir = path.join(CHUNKS_DIR, id);
+        if (!fs.existsSync(messageDir)) {
+          fs.mkdirSync(messageDir, { recursive: true });
+        }
+        fs.writeFileSync(path.join(messageDir, `chunk_${chunkIndex}.txt`), chunkData, 'utf-8');
+      } catch (fsErr) {
+        console.warn("Disk chunk write warning:", fsErr);
+      }
+
       const adminFirestore = getAdminFirestoreInstance();
 
       if (adminFirestore) {
@@ -610,8 +627,6 @@ app.use((req, res, next) => {
       } else if (firestore) {
         const chunkRef = doc(firestore, `messages/${id}/chunks/chunk_${chunkIndex}`);
         await setDoc(chunkRef, { data: chunkData });
-      } else {
-        throw new Error("Database not initialized");
       }
 
       res.json({ success: true });
@@ -637,13 +652,26 @@ app.use((req, res, next) => {
        const data = docSnap.data()!;
        if (data.expiryTimestamp && Date.now() > data.expiryTimestamp) {
           await adminFirestore.collection('messages').doc(id).delete();
+          try { fs.rmSync(path.join(CHUNKS_DIR, id), { recursive: true, force: true }); } catch (e) {}
           return res.status(404).json({ error: 'Message expired' });
        }
        if (data.viewLimit !== -1 && data.viewCount >= data.viewLimit) {
           await adminFirestore.collection('messages').doc(id).delete();
+          try { fs.rmSync(path.join(CHUNKS_DIR, id), { recursive: true, force: true }); } catch (e) {}
           return res.status(404).json({ error: 'Message destroyed' });
        }
-       res.json({ id, hasPassword: !!data.passwordHash, createdAt: data.createdAt, viewLimit: data.viewLimit, viewCount: data.viewCount });
+       res.json({
+         id,
+         hasPassword: !!data.passwordHash,
+         createdAt: data.createdAt,
+         viewLimit: data.viewLimit,
+         viewCount: data.viewCount,
+         hasFile: !!data.hasFile,
+         fileName: data.fileName || null,
+         fileType: data.fileType || null,
+         fileSize: data.fileSize || null,
+         isFolder: !!data.isFolder,
+       });
     } catch (err) {
        console.error(err);
        res.status(500).json({ error: 'Server error' });
@@ -653,6 +681,19 @@ app.use((req, res, next) => {
   app.get('/api/messages/:id/chunks', async (req, res) => {
     try {
       const { id } = req.params;
+      const messageDir = path.join(CHUNKS_DIR, id);
+      if (fs.existsSync(messageDir)) {
+        const files = fs.readdirSync(messageDir);
+        if (files.length > 0) {
+          const chunks = files.map(file => {
+            const chunkId = file.replace('.txt', '');
+            const data = fs.readFileSync(path.join(messageDir, file), 'utf-8');
+            return { id: chunkId, data };
+          });
+          return res.json({ chunks });
+        }
+      }
+
       const adminFirestore = getAdminFirestoreInstance();
       if (!adminFirestore) {
          // Lite mode fallback
@@ -664,6 +705,34 @@ app.use((req, res, next) => {
       const snapshot = await adminFirestore.collection('messages').doc(id).collection('chunks').get();
       const chunks = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
       res.json({ chunks });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Server error' });
+    }
+  });
+
+  app.get('/api/messages/:id/chunk/:index', async (req, res) => {
+    try {
+      const { id, index } = req.params;
+      const chunkFile = path.join(CHUNKS_DIR, id, `chunk_${index}.txt`);
+      if (fs.existsSync(chunkFile)) {
+        const data = fs.readFileSync(chunkFile, 'utf-8');
+        return res.json({ id: `chunk_${index}`, data });
+      }
+      const adminFirestore = getAdminFirestoreInstance();
+      if (adminFirestore) {
+        const docSnap = await adminFirestore.collection('messages').doc(id).collection('chunks').doc(`chunk_${index}`).get();
+        if (docSnap.exists) {
+          return res.json({ id: `chunk_${index}`, data: docSnap.data()?.data });
+        }
+      } else if (firestore) {
+        const { getDoc, doc: fDoc } = await import('firebase/firestore/lite');
+        const docSnap = await getDoc(fDoc(firestore, `messages/${id}/chunks/chunk_${index}`));
+        if (docSnap.exists()) {
+          return res.json({ id: `chunk_${index}`, data: docSnap.data().data });
+        }
+      }
+      return res.status(404).json({ error: 'Chunk not found' });
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: 'Server error' });
@@ -754,6 +823,7 @@ app.use((req, res, next) => {
       });
 
       if (shouldDeleteChunks && chunkCount > 0) {
+         try { fs.rmSync(path.join(CHUNKS_DIR, id), { recursive: true, force: true }); } catch (e) {}
          // Delete chunks in background
          (async () => {
            for (let i = 0; i < chunkCount; i += 10) {
@@ -791,6 +861,7 @@ app.use((req, res, next) => {
         
         const chunkCount = docSnap.data()?.chunkCount || 0;
         await docRef.delete();
+        try { fs.rmSync(path.join(CHUNKS_DIR, id), { recursive: true, force: true }); } catch (e) {}
         if (chunkCount > 0) {
            for (let i = 0; i < chunkCount; i += 10) {
              const batch = adminFirestore.batch();
@@ -877,7 +948,12 @@ app.use((req, res, next) => {
         viewLimit: finalViewLimit,
         viewCount: 0,
         passwordHash: finalPasswordHash,
-        createdAt: Date.now()
+        createdAt: Date.now(),
+        hasFile: !!req.body.hasFile,
+        fileName: req.body.fileName || null,
+        fileType: req.body.fileType || null,
+        fileSize: req.body.fileSize || null,
+        isFolder: !!req.body.isFolder,
       };
       
       if (req.body.paidFeatureUnlock) {

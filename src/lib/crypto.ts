@@ -112,7 +112,11 @@ export async function hashPassword(password: string): Promise<string> {
 }
 
 function bytesToBase64Url(bytes: Uint8Array): string {
-  const binString = Array.from(bytes, (byte) => String.fromCharCode(byte)).join("");
+  const CHUNK_SIZE = 0x8000;
+  let binString = "";
+  for (let i = 0; i < bytes.length; i += CHUNK_SIZE) {
+    binString += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK_SIZE) as any);
+  }
   return btoa(binString).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
@@ -122,5 +126,10 @@ function base64UrlToBytes(base64url: string): Uint8Array {
     base64 += '=';
   }
   const binString = atob(base64);
-  return Uint8Array.from(binString, (m) => m.codePointAt(0)!);
+  const len = binString.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binString.charCodeAt(i);
+  }
+  return bytes;
 }
